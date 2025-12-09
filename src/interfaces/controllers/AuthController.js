@@ -40,6 +40,49 @@ class AuthController {
             res.status(statusCode).json({ message: error.message });
         }
     }
+
+    googleLogin(req, res, next, passport) {
+        const { campusId } = req.query;
+        
+        // Encode state để truyền campusId đi
+        const state = Buffer.from(JSON.stringify({ campusId })).toString('base64');
+
+        passport.authenticate('google', {
+            scope: ['profile', 'email'],
+            state: state, // Truyền campusId qua state
+            session: false //  dùng JWT, không dùng session cookie
+        })(req, res, next);
+    }
+
+    //  Xử lý Callback từ Google
+    googleCallback(req, res, next, passport) {
+        passport.authenticate('google', { session: false }, (err, data, info) => {
+            if (err) {
+                // Login thất bại (sai domain, lỗi server...) -> Redirect về trang lỗi của Frontend
+                const errorMessage = encodeURIComponent(err.message);
+                return res.redirect(`http://localhost:5000/login?error=${errorMessage}`);   // đặt đại http://localhost:5000 là frontend, sẻ sửa sau
+            }
+
+            if (!data) {
+                return res.redirect('http://localhost:5000/login?error=AuthenticationFailed');
+            }
+
+            // Login thành công -> Redirect về trang chủ kèm Token
+            const { token } = data;
+            //  kẹp token vào miếng bánh quy(cookies) tạm thời (chỉ sống 1-2 phút)
+            // Lưu ý: httpOnly phải là FALSE để Javascript Frontend đọc được
+            res.cookie('access_token', token, {
+                maxAge: 2 * 60 * 1000, // 2 phút
+                httpOnly: false,       // Cho phép FE đọc cookie này
+                secure: false,         // Để false khi chạy localhost (http), lên prod (https) thì để true
+                sameSite: 'lax',       // Quan trọng để cookie tồn tại sau khi redirect
+                path: '/'
+            });
+
+            // 2. Redirect về trang chủ frontend (URL sạch đẹp)
+            return res.redirect('http://localhost:5000');
+        })(req, res, next);
+    }
 }
 
 module.exports = AuthController;

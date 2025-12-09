@@ -58,9 +58,10 @@ model Campus {
 model User {
   id           Int      @id @default(autoincrement())
   email        String   @unique
-  passwordHash String
+  passwordHash String?
   fullName     String
   role         UserRole
+  googleId     String?  @unique
   phoneNumber  String?
   isActive     Boolean  @default(true)
   campusId     Int

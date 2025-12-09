@@ -33,6 +33,22 @@ class PrismaUserRepository extends IUserRepository {
 
         return new User(userPrisma);
     }
+    async create(userData) {
+        const newUser = await this.prisma.user.create({
+            data: {
+                email: userData.email,
+                fullName: userData.fullName,
+                googleId: userData.googleId,
+                role: userData.role,
+                campusId: userData.campusId,
+                passwordHash: null, // không có register nên Không có mật khẩu
+                isActive: true
+            },
+            include: { campus: true }
+        });
+        return new User(newUser);
+    }
+    
 }
 
 module.exports = PrismaUserRepository;

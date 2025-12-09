@@ -3,8 +3,20 @@ require('dotenv').config();
 
 // Middleware để xác thực token
 const authenticate = (req, res, next) => {
+    // const authHeader = req.headers['authorization'];
+    // const token = authHeader && authHeader.split(' ')[1]; // Lấy token từ 'Bearer TOKEN'
+
+    let token = null;
+    // ƯU TIÊN 1: Lấy từ Header
     const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1]; // Lấy token từ 'Bearer TOKEN'
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+        token = authHeader.split(' ')[1];
+    }
+
+    // ƯU TIÊN 2: Lấy từ Cookie (Dành cho trình duyệt / Frontend)
+    else if (req.cookies && req.cookies.access_token) {
+        token = req.cookies.access_token;
+    }
 
     if (!token) {
         return res.status(401).json({ message: 'Access token is missing.' });
