@@ -16,12 +16,10 @@ servers:
 # --- CẤU HÌNH BẢO MẬT ---
 components:
   securitySchemes:
-    # Cách 1: Cookie (Cho Browser)
     cookieAuth:
       type: apiKey
       in: cookie
       name: access_token
-    # Cách 2: Bearer Header (Cho Tool/Swagger)
     bearerAuth:
       type: http
       scheme: bearer
@@ -29,157 +27,119 @@ components:
 
   # --- ĐỊNH NGHĨA DATA MODELS (SCHEMAS) ---
   schemas:
-    # 1. Model Input khi đăng nhập thường
+    # 1. Login & Auth
     LoginInput:
       type: object
-      required:
-        - email
-        - password
+      required: [email, password]
       properties:
-        email:
-          type: string
-          format: email
-          example: "admin@fpt.edu.vn"
-        password:
-          type: string
-          format: password
-          example: "123456"
+        email: { type: string, format: email, example: "admin@fpt.edu.vn" }
+        password: { type: string, format: password, example: "123456" }
 
-    # 2. Model User (Output)
     User:
       type: object
       properties:
-        id:
-          type: integer
-          example: 101
-        fullName:
-          type: string
-          example: "Nguyen Van A"
-        email:
-          type: string
-          format: email
-          example: "anv@fpt.edu.vn"
-        role:
-          type: string
-          enum: [STUDENT, LECTURER, FACILITY_ADMIN, SECURITY]
-          example: "STUDENT"
-        campusId:
-          type: integer
-          example: 1
-        campusName:
-          type: string
-          example: "FPTU HCM - Quan 9"
-        phoneNumber:
-          type: string
-          example: "0901234567"
-        isActive:
-          type: boolean
-          example: true
+        id: { type: integer, example: 1 }
+        fullName: { type: string, example: "Nguyen Van A" }
+        email: { type: string, example: "anv@fpt.edu.vn" }
+        role: { type: string, enum: [STUDENT, LECTURER, FACILITY_ADMIN, SECURITY], example: "STUDENT" }
+        campusId: { type: integer, example: 1 }
+        campusName: { type: string, example: "FPTU HCM" }
+        phoneNumber: { type: string, example: "0901234567" }
+        isActive: { type: boolean, example: true }
 
-    # 3. Model Response Login
     LoginResponse:
       type: object
       properties:
-        message:
-          type: string
-          example: "Đăng nhập thành công"
-        token:
-          type: string
-          description: "JWT Token (Dùng để test)"
-        user:
-          $ref: '#/components/schemas/User'
+        message: { type: string }
+        token: { type: string }
+        user: { $ref: '#/components/schemas/User' }
 
-    # 4. Input Cập nhật Profile
-    UpdateProfileInput:
-      type: object
-      properties:
-        fullName:
-          type: string
-          minLength: 2
-          example: "Nguyen Van B"
-          description: "Tên hiển thị mới"
-        phoneNumber:
-          type: string
-          pattern: "^[0-9]{10,11}$"
-          example: "0987654321"
-          description: "Số điện thoại mới (10-11 số)"
-
-    # 5. Input Đổi Mật Khẩu
-    ChangePasswordInput:
-      type: object
-      required:
-        - newPassword
-        - confirmPassword
-      properties:
-        newPassword:
-          type: string
-          format: password
-          minLength: 6
-          example: "NewPass123"
-          description: "Mật khẩu mới (tối thiểu 6 ký tự)"
-        confirmPassword:
-          type: string
-          format: password
-          example: "NewPass123"
-          description: "Nhập lại mật khẩu mới để xác nhận"
-
-    # 6. Model Lỗi
     ErrorResponse:
       type: object
       properties:
-        message:
-          type: string
-          example: "Thông tin không hợp lệ."
+        message: { type: string, example: "Lỗi hệ thống hoặc dữ liệu không hợp lệ." }
 
-    # 5. Maintenance: Set maintenance request
+    # 2. User Update
+    UpdateProfileInput:
+      type: object
+      properties:
+        fullName: { type: string, minLength: 2, example: "Nguyen Van B" }
+        phoneNumber: { type: string, pattern: "^[0-9]{10,11}$", example: "0987654321" }
+
+    ChangePasswordInput:
+      type: object
+      required: [newPassword, confirmPassword]
+      properties:
+        newPassword: { type: string, format: password, minLength: 6, example: "NewPass123" }
+        confirmPassword: { type: string, format: password, example: "NewPass123" }
+
+    # 3. Resources (Campus, Facility, Club)
+    CampusInput:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, example: "FPTU Hoa Lac" }
+        address: { type: string, example: "Khu CNC Hoa Lac" }
+
+    FacilityTypeInput:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, example: "Phòng học" }
+        description: { type: string }
+
+    FacilityInput:
+      type: object
+      required: [name, campusId, typeId, capacity]
+      properties:
+        name: { type: string, example: "R101" }
+        capacity: { type: integer, example: 30 }
+        campusId: { type: integer }
+        typeId: { type: integer }
+        description: { type: string }
+        imageUrls: { type: array, items: { type: string } }
+
+    ClubInput:
+      type: object
+      required: [code, name, campusId]
+      properties:
+        code: { type: string, example: "F-Code" }
+        name: { type: string, example: "FPT Code Club" }
+        description: { type: string }
+        campusId: { type: integer }
+        leaderId: { type: integer, nullable: true }
+
+    ClubPriorityInput:
+      type: object
+      required: [facilityId, priorityScore]
+      properties:
+        facilityId: { type: integer }
+        priorityScore: { type: integer, description: "Điểm ưu tiên (VD: 100)" }
+        note: { type: string }
+
+    # 4. Maintenance
     MaintenanceSetRequest:
       type: object
-      required:
-        - facilityId
-        - startDate
-        - reason
+      required: [facilityId, startDate, reason]
       properties:
-        facilityId:
-          type: integer
-          example: 1
-        startDate:
-          type: string
-          format: date-time
-          example: "2025-12-12T13:00:00Z"
-        endDate:
-          type: string
-          format: date-time
-          nullable: true
-          example: "2025-12-12T15:00:00Z"
-        reason:
-          type: string
-          example: "AC maintenance"
+        facilityId: { type: integer, example: 1 }
+        startDate: { type: string, format: date-time, example: "2025-12-12T13:00:00Z" }
+        endDate: { type: string, format: date-time, nullable: true }
+        reason: { type: string, example: "Sửa máy lạnh" }
 
-    # 6. Maintenance: Set maintenance response
     MaintenanceSetResponse:
       type: object
       properties:
-        maintenanceId:
-          type: integer
-          example: 42
-        totalAffected:
-          type: integer
-          example: 3
+        maintenanceId: { type: integer }
+        totalAffected: { type: integer }
         results:
           type: array
           items:
             type: object
             properties:
-              bookingId:
-                type: integer
-                example: 123
-              action:
-                type: string
-                enum: [RELOCATED, CANCELLED]
-              toFacilityId:
-                type: integer
-                nullable: true
-                example: 7
+              bookingId: { type: integer }
+              action: { type: string, enum: [RELOCATED, CANCELLED] }
+              toFacilityId: { type: integer, nullable: true }
 
 # --- ĐỊNH NGHĨA CÁC API (PATHS) ---
 paths:
@@ -188,191 +148,126 @@ paths:
   # ==================================
   /auth/login:
     post:
-      summary: Đăng nhập thường (Email/Password)
-      tags:
-        - Authentication
-      security: [] # Public
+      summary: Đăng nhập thường
+      tags: [Authentication]
+      security: []
       requestBody:
-        required: true
         content:
           application/json:
-            schema:
-              $ref: '#/components/schemas/LoginInput'
+            schema: { $ref: '#/components/schemas/LoginInput' }
       responses:
         '200':
-          description: Đăng nhập thành công
-          headers: 
-            Set-Cookie:
-              schema: 
-                type: string
-                example: access_token=eyJ...; Path=/; HttpOnly
+          description: OK
+          headers:
+            Set-Cookie: { schema: { type: string } }
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/LoginResponse'
-        '401':
-          description: Sai thông tin đăng nhập
+              schema: { $ref: '#/components/schemas/LoginResponse' }
+        '401': { description: Unauthorized }
 
   /auth/google/login:
     get:
-      summary: Login Google - Bước 1 (Redirect)
-      description: API trả về 302 Redirect sang trang đăng nhập Google.
-      tags:
-        - Authentication
+      summary: Login Google (Redirect)
+      tags: [Authentication]
       security: []
       parameters:
         - in: query
           name: campusId
-          schema:
-            type: integer
+          schema: { type: integer }
           required: true
-          description: "ID Campus user chọn (VD: 1=HN, 2=HCM)"
-          example: 2
       responses:
-        '302':
-          description: Redirect sang accounts.google.com...
+        '302': { description: Redirect to Google }
 
   /auth/google/callback:
     get:
-      summary: Login Google - Bước 2 (Callback)
-      description: Google gọi lại API này. Server xử lý và Redirect về trang chủ.
-      tags:
-        - Authentication
+      summary: Login Google Callback
+      tags: [Authentication]
       security: []
       parameters:
         - in: query
           name: code
-          schema:
-            type: string
+          schema: { type: string }
         - in: query
           name: state
-          schema:
-            type: string
+          schema: { type: string }
       responses:
-        '302':
-          description: Thành công -> Redirect về http://localhost:3000
+        '302': { description: Redirect to Frontend }
 
   /auth/profile:
     get:
-      summary: Xem thông tin user đang đăng nhập
-      tags:
-        - Authentication
-      security:
-        - cookieAuth: []
-        - bearerAuth: []
+      summary: Xem profile hiện tại
+      tags: [Authentication]
+      security: [{ cookieAuth: [] }, { bearerAuth: [] }]
       responses:
         '200':
-          description: Thành công
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/User'
-        '401':
-          description: Chưa đăng nhập hoặc Token hết hạn
+              schema: { $ref: '#/components/schemas/User' }
+        '401': { description: Unauthorized }
 
   # ==================================
-  # GROUP 2: USER MANAGEMENT (MỚI)
+  # GROUP 2: USER MANAGEMENT
   # ==================================
   /users/update-profile:
     patch:
-      summary: Cập nhật thông tin cá nhân (Tên, SĐT)
-      tags:
-        - User Management
-      security:
-        - cookieAuth: []
-        - bearerAuth: []
+      summary: Cập nhật thông tin (Tên, SĐT)
+      tags: [User Management]
+      security: [{ cookieAuth: [] }, { bearerAuth: [] }]
       requestBody:
-        required: true
         content:
           application/json:
-            schema:
-              $ref: '#/components/schemas/UpdateProfileInput'
+            schema: { $ref: '#/components/schemas/UpdateProfileInput' }
       responses:
         '200':
-          description: Cập nhật thành công
           content:
             application/json:
-              schema:
-                type: object
-                properties:
-                  message:
-                    type: string
-                  data:
-                    $ref: '#/components/schemas/User'
-        '400':
-          description: Lỗi dữ liệu (Tên quá ngắn, SĐT sai)
+              schema: { $ref: '#/components/schemas/User' }
 
   /users/change-password:
     patch:
       summary: Đổi mật khẩu
-      tags:
-        - User Management
-      security:
-        - cookieAuth: []
-                $ref: '#/components/schemas/ErrorResponse'
-  
+      tags: [User Management]
+      security: [{ cookieAuth: [] }, { bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ChangePasswordInput' }
+      responses:
+        '200':
+          description: Thành công
+          content:
+             application/json:
+               example: { "message": "Đổi mật khẩu thành công." }
+        '400': { description: Lỗi validate }
+
   # ==================================
-  # 3. SET MAINTENANCE (Protected - FACILITY_ADMIN)
+  # GROUP 3: MAINTENANCE (FACILITY_ADMIN)
   # ==================================
   /maintenance/set:
     post:
-      summary: Thiết lập bảo trì và tự động xử lý booking bị ảnh hưởng
-      description: >
-        Tạo MaintenanceLog cho một phòng và hệ thống sẽ tự động chuyển phòng (relocate) hoặc hủy (cancel) các booking Approved bị ảnh hưởng.
-        Yêu cầu header `Authorization: Bearer <token>` và vai trò `FACILITY_ADMIN`.
-      tags:
-        - Maintenance
-      security:
-        - bearerAuth: []
+      summary: Thiết lập bảo trì (Tự động xử lý booking)
+      tags: [Maintenance]
+      security: [{ bearerAuth: [] }]
       requestBody:
         required: true
         content:
           application/json:
-            schema:
-              $ref: '#/components/schemas/ChangePasswordInput'
+            schema: { $ref: '#/components/schemas/MaintenanceSetRequest' }
       responses:
         '200':
-          description: Đổi mật khẩu thành công
           content:
             application/json:
-              example: { "message": "Đổi mật khẩu thành công. Vui lòng đăng nhập lại." }
-        '400':
-          description: Mật khẩu không khớp hoặc quá ngắn
-              $ref: '#/components/schemas/MaintenanceSetRequest'
-      responses:
-        '200':
-          description: Tạo maintenance và xử lý thành công
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MaintenanceSetResponse'
-        '400':
-          description: Thiếu trường bắt buộc
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '401':
-          description: Chưa đăng nhập hoặc token không hợp lệ
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '403':
-          description: Không đủ quyền FACILITY_ADMIN
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+              schema: { $ref: '#/components/schemas/MaintenanceSetResponse' }
+        '403': { description: Forbidden }
 
   # ==================================
-  # 4. RESOURCES (Protected - FACILITY_ADMIN/CAMPUS_ADMIN)
+  # GROUP 4: RESOURCES (CRUD)
   # ==================================
   /campuses:
     get:
-      summary: Lấy danh sách Campus (active)
+      summary: Lấy danh sách Campus
       tags: [Resources]
-      security: [{ bearerAuth: [] }]
+      security: []
       responses:
         '200': { description: OK }
     post:
@@ -380,16 +275,12 @@ paths:
       tags: [Resources]
       security: [{ bearerAuth: [] }]
       requestBody:
-        required: true
         content:
           application/json:
-            schema:
-              type: object
-              properties:
-                name: { type: string }
-                address: { type: string }
+            schema: { $ref: '#/components/schemas/CampusInput' }
       responses:
         '201': { description: Created }
+
   /campuses/{id}:
     put:
       summary: Cập nhật Campus
@@ -398,85 +289,47 @@ paths:
       parameters:
         - in: path
           name: id
-          schema: { type: integer }
           required: true
+          schema: { type: integer }
       requestBody:
-        required: true
         content:
           application/json:
-            schema:
-              type: object
+            schema: { $ref: '#/components/schemas/CampusInput' }
       responses:
         '200': { description: Updated }
     delete:
-      summary: Soft delete Campus
+      summary: Xóa (Soft delete) Campus
       tags: [Resources]
       security: [{ bearerAuth: [] }]
       parameters:
         - in: path
           name: id
-          schema: { type: integer }
           required: true
+          schema: { type: integer }
       responses:
         '200': { description: Deleted }
 
   /facility-types:
     get:
-      summary: Lấy danh sách FacilityType (active)
+      summary: Lấy danh sách loại phòng
       tags: [Resources]
-      security: [{ bearerAuth: [] }]
       responses:
         '200': { description: OK }
     post:
-      summary: Tạo FacilityType
+      summary: Tạo loại phòng
       tags: [Resources]
       security: [{ bearerAuth: [] }]
       requestBody:
-        required: true
         content:
           application/json:
-            schema:
-              type: object
-              properties:
-                name: { type: string }
-                description: { type: string }
+            schema: { $ref: '#/components/schemas/FacilityTypeInput' }
       responses:
         '201': { description: Created }
-  /facility-types/{id}:
-    put:
-      summary: Cập nhật FacilityType
-      tags: [Resources]
-      security: [{ bearerAuth: [] }]
-      parameters:
-        - in: path
-          name: id
-          schema: { type: integer }
-          required: true
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-      responses:
-        '200': { description: Updated }
-    delete:
-      summary: Soft delete FacilityType
-      tags: [Resources]
-      security: [{ bearerAuth: [] }]
-      parameters:
-        - in: path
-          name: id
-          schema: { type: integer }
-          required: true
-      responses:
-        '200': { description: Deleted }
 
   /facilities:
     get:
-      summary: Lấy danh sách Facilities (active)
+      summary: Lấy danh sách phòng
       tags: [Resources]
-      security: [{ bearerAuth: [] }]
       parameters:
         - in: query
           name: campusId
@@ -487,52 +340,51 @@ paths:
       responses:
         '200': { description: OK }
     post:
-      summary: Tạo Facility
+      summary: Tạo phòng mới
       tags: [Resources]
       security: [{ bearerAuth: [] }]
       requestBody:
-        required: true
         content:
           application/json:
-            schema:
-              type: object
+            schema: { $ref: '#/components/schemas/FacilityInput' }
       responses:
         '201': { description: Created }
+
   /facilities/{id}:
     put:
-      summary: Cập nhật Facility
+      summary: Cập nhật phòng
       tags: [Resources]
       security: [{ bearerAuth: [] }]
       parameters:
         - in: path
           name: id
-          schema: { type: integer }
           required: true
+          schema: { type: integer }
       requestBody:
-        required: true
         content:
           application/json:
-            schema:
-              type: object
+            schema: { $ref: '#/components/schemas/FacilityInput' }
       responses:
         '200': { description: Updated }
     delete:
-      summary: Soft delete Facility (INACTIVE)
+      summary: Xóa (Soft delete) phòng
       tags: [Resources]
       security: [{ bearerAuth: [] }]
       parameters:
         - in: path
           name: id
-          schema: { type: integer }
           required: true
+          schema: { type: integer }
       responses:
         '200': { description: Deleted }
 
+  # ==================================
+  # GROUP 5: CLUBS & PRIORITIES
+  # ==================================
   /clubs:
     get:
-      summary: Lấy danh sách CLB theo campus
+      summary: Lấy danh sách CLB
       tags: [Clubs]
-      security: [{ bearerAuth: [] }]
       parameters:
         - in: query
           name: campusId
@@ -540,82 +392,85 @@ paths:
       responses:
         '200': { description: OK }
     post:
-      summary: Tạo Club
+      summary: Tạo CLB mới
       tags: [Clubs]
       security: [{ bearerAuth: [] }]
       requestBody:
-        required: true
         content:
           application/json:
-            schema:
-              type: object
+            schema: { $ref: '#/components/schemas/ClubInput' }
       responses:
         '201': { description: Created }
+
   /clubs/{id}:
     put:
-      summary: Cập nhật Club
+      summary: Cập nhật CLB
       tags: [Clubs]
       security: [{ bearerAuth: [] }]
       parameters:
         - in: path
           name: id
-          schema: { type: integer }
           required: true
+          schema: { type: integer }
       requestBody:
-        required: true
         content:
           application/json:
-            schema:
-              type: object
+            schema: { $ref: '#/components/schemas/ClubInput' }
       responses:
         '200': { description: Updated }
     delete:
-      summary: Soft delete Club
+      summary: Xóa CLB
       tags: [Clubs]
       security: [{ bearerAuth: [] }]
       parameters:
         - in: path
           name: id
-          schema: { type: integer }
           required: true
+          schema: { type: integer }
       responses:
         '200': { description: Deleted }
 
   /clubs/{id}/priorities:
     get:
-      summary: Danh sách phòng ưu tiên của CLB
-      tags: [Clubs]
-      security: [{ bearerAuth: [] }]
-      responses:
-        '200': { description: OK }
-    post:
-      summary: Gán/ cập nhật phòng ưu tiên cho CLB
-      tags: [Clubs]
-      security: [{ bearerAuth: [] }]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                facilityId: { type: integer }
-                priorityLevel: { type: integer }
-      responses:
-        '200': { description: Assigned }
-  /clubs/{id}/priorities/{facilityId}:
-    delete:
-      summary: Gỡ phòng ưu tiên khỏi CLB
+      summary: Xem quyền ưu tiên phòng của CLB
       tags: [Clubs]
       security: [{ bearerAuth: [] }]
       parameters:
         - in: path
           name: id
-          schema: { type: integer }
           required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: OK }
+    post:
+      summary: Gán quyền ưu tiên phòng cho CLB
+      tags: [Clubs]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ClubPriorityInput' }
+      responses:
+        '200': { description: Assigned }
+
+  /clubs/{id}/priorities/{facilityId}:
+    delete:
+      summary: Gỡ quyền ưu tiên
+      tags: [Clubs]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
         - in: path
           name: facilityId
-          schema: { type: integer }
           required: true
+          schema: { type: integer }
       responses:
         '200': { description: Removed }
