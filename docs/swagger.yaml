@@ -4,24 +4,28 @@ info:
   description: |
     Tài liệu API cho hệ thống đặt phòng FPTU Multi-campus.
     
-    Cơ chế xác thực: **Cookie (HttpOnly)**.
-    - Web Browser: Tự động gửi Cookie sau khi đăng nhập.
-    - Swagger UI/Postman: Cần lấy Cookie từ DevTools và nhập vào nút Authorize.
+    ### Cơ chế xác thực (Authentication)
+    Hệ thống hỗ trợ 2 cách gửi Token:
+    1. **Cookie (HttpOnly)**: Trình duyệt tự động gửi cookie `access_token` sau khi login.
+    2. **Bearer Token**: Dùng cho Postman hoặc Test trên Swagger. Nhập token vào nút **Authorize**.
   version: 1.0.0
 servers:
   - url: http://localhost:6969/api
     description: Local Development Server
 
-# --- CẤU HÌNH BẢO MẬT (COOKIE) ---
+# --- CẤU HÌNH BẢO MẬT ---
 components:
   securitySchemes:
+    # Cách 1: Cookie (Cho Browser)
     cookieAuth:
       type: apiKey
       in: cookie
-      name: access_token # Tên Cookie chứa JWT
-      description: >
-        Nhập giá trị của cookie `access_token` vào đây để test trên Swagger.
-        (Thực tế trình duyệt sẽ tự gửi, không cần nhập).
+      name: access_token
+    # Cách 2: Bearer Header (Cho Tool/Swagger)
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
 
   # --- ĐỊNH NGHĨA DATA MODELS (SCHEMAS) ---
   schemas:
@@ -36,63 +40,96 @@ components:
           type: string
           format: email
           example: "admin@fpt.edu.vn"
-          description: "Email của user"
         password:
           type: string
           format: password
           example: "123456"
-          description: "Mật khẩu đăng nhập"
 
-    # 2. Model User
+    # 2. Model User (Output)
     User:
       type: object
       properties:
         id:
           type: integer
-          example: 1
+          example: 101
         fullName:
           type: string
-          example: "Nguyen Van Admin"
+          example: "Nguyen Van A"
         email:
           type: string
           format: email
-          example: "admin@fpt.edu.vn"
+          example: "anv@fpt.edu.vn"
         role:
           type: string
-          enum: [STUDENT, LECTURER, FACILITY_ADMIN]
-          example: "FACILITY_ADMIN"
+          enum: [STUDENT, LECTURER, FACILITY_ADMIN, SECURITY]
+          example: "STUDENT"
         campusId:
           type: integer
           example: 1
-        campus:
+        campusName:
           type: string
-          description: "Tên campus"
           example: "FPTU HCM - Quan 9"
+        phoneNumber:
+          type: string
+          example: "0901234567"
         isActive:
           type: boolean
           example: true
 
-    # 3. Model Response (Trả về User + Info Cookie)
+    # 3. Model Response Login
     LoginResponse:
       type: object
       properties:
         message:
           type: string
           example: "Đăng nhập thành công"
+        token:
+          type: string
+          description: "JWT Token (Dùng để test)"
         user:
           $ref: '#/components/schemas/User'
-      description: "Lưu ý: Token thực tế nằm trong Header `Set-Cookie`, không nằm trong body này."
 
-    # 4. Model Lỗi chung
+    # 4. Input Cập nhật Profile
+    UpdateProfileInput:
+      type: object
+      properties:
+        fullName:
+          type: string
+          minLength: 2
+          example: "Nguyen Van B"
+          description: "Tên hiển thị mới"
+        phoneNumber:
+          type: string
+          pattern: "^[0-9]{10,11}$"
+          example: "0987654321"
+          description: "Số điện thoại mới (10-11 số)"
+
+    # 5. Input Đổi Mật Khẩu
+    ChangePasswordInput:
+      type: object
+      required:
+        - newPassword
+        - confirmPassword
+      properties:
+        newPassword:
+          type: string
+          format: password
+          minLength: 6
+          example: "NewPass123"
+          description: "Mật khẩu mới (tối thiểu 6 ký tự)"
+        confirmPassword:
+          type: string
+          format: password
+          example: "NewPass123"
+          description: "Nhập lại mật khẩu mới để xác nhận"
+
+    # 6. Model Lỗi
     ErrorResponse:
       type: object
       properties:
-        status:
-          type: integer
-          example: 401
         message:
           type: string
-          example: "Thông tin đăng nhập không chính xác hoặc Cookie hết hạn."
+          example: "Thông tin không hợp lệ."
 
     # 5. Maintenance: Set maintenance request
     MaintenanceSetRequest:
@@ -147,19 +184,15 @@ components:
 # --- ĐỊNH NGHĨA CÁC API (PATHS) ---
 paths:
   # ==================================
-  # 1. ĐĂNG NHẬP THƯỜNG (Email/Pass)
+  # GROUP 1: AUTHENTICATION
   # ==================================
   /auth/login:
     post:
-      summary: Đăng nhập hệ thống (Email/Password)
-      description: >
-        Xác thực user nội bộ. 
-        Nếu thành công, Server trả về header `Set-Cookie: access_token=...; HttpOnly`.
+      summary: Đăng nhập thường (Email/Password)
       tags:
         - Authentication
-      security: [] # Public API
+      security: [] # Public
       requestBody:
-        description: Thông tin đăng nhập
         required: true
         content:
           application/json:
@@ -167,36 +200,26 @@ paths:
               $ref: '#/components/schemas/LoginInput'
       responses:
         '200':
-          description: Đăng nhập thành công. Kiểm tra Header để thấy Cookie.
+          description: Đăng nhập thành công
           headers: 
             Set-Cookie:
               schema: 
                 type: string
-                example: access_token=eyJhbGci...; Path=/; HttpOnly
-              description: Cookie chứa JWT token.
+                example: access_token=eyJ...; Path=/; HttpOnly
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/LoginResponse'
         '401':
-          description: Sai thông tin
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          description: Sai thông tin đăng nhập
 
-  # ==================================
-  # 2. ĐĂNG NHẬP GOOGLE (Quy trình Redirect)
-  # ==================================
   /auth/google/login:
     get:
-      summary: Bước 1 - Chuyển hướng sang Google Login
-      description: >
-        User click nút "Login Google". API này nhận `campusId`, lưu state,
-        và trả về HTTP 302 để trình duyệt chuyển sang trang Google.
+      summary: Login Google - Bước 1 (Redirect)
+      description: API trả về 302 Redirect sang trang đăng nhập Google.
       tags:
         - Authentication
-      security: [] # Public API
+      security: []
       parameters:
         - in: query
           name: campusId
@@ -207,17 +230,12 @@ paths:
           example: 2
       responses:
         '302':
-          description: Redirect sang Google Accounts (https://accounts.google.com/...)
+          description: Redirect sang accounts.google.com...
 
   /auth/google/callback:
     get:
-      summary: Bước 2 - Google gọi lại & Set Cookie
-      description: >
-        Google redirect về đây kèm `code`. 
-        Backend đổi code lấy token, tìm user trong DB.
-        
-        - Thành công: Redirect về trang chủ + Set Cookie.
-        - Thất bại: Redirect về trang Login + Lỗi.
+      summary: Login Google - Bước 2 (Callback)
+      description: Google gọi lại API này. Server xử lý và Redirect về trang chủ.
       tags:
         - Authentication
       security: []
@@ -226,44 +244,71 @@ paths:
           name: code
           schema:
             type: string
-          description: "Auth Code từ Google"
         - in: query
           name: state
           schema:
             type: string
-          description: "State bảo mật"
       responses:
         '302':
-          description: >
-            Đăng nhập thành công.
-            Headers: `Set-Cookie: access_token=...`
-            Location: `http://localhost:3000/home`
+          description: Thành công -> Redirect về http://localhost:3000
 
-  # ==================================
-  # 3. XEM PROFILE (Protected by Cookie)
-  # ==================================
   /auth/profile:
     get:
-      summary: Xem thông tin cá nhân (My Profile)
-      description: >
-        Lấy thông tin User hiện tại.
-        Trình duyệt tự động gửi Cookie `access_token`.
+      summary: Xem thông tin user đang đăng nhập
       tags:
-        - User Profile
+        - Authentication
       security:
-        - cookieAuth: [] # Yêu cầu Cookie
+        - cookieAuth: []
+        - bearerAuth: []
       responses:
         '200':
-          description: Lấy thông tin thành công
+          description: Thành công
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/User'
         '401':
-          description: Chưa đăng nhập hoặc Cookie hết hạn
+          description: Chưa đăng nhập hoặc Token hết hạn
+
+  # ==================================
+  # GROUP 2: USER MANAGEMENT (MỚI)
+  # ==================================
+  /users/update-profile:
+    patch:
+      summary: Cập nhật thông tin cá nhân (Tên, SĐT)
+      tags:
+        - User Management
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProfileInput'
+      responses:
+        '200':
+          description: Cập nhật thành công
           content:
             application/json:
               schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  data:
+                    $ref: '#/components/schemas/User'
+        '400':
+          description: Lỗi dữ liệu (Tên quá ngắn, SĐT sai)
+
+  /users/change-password:
+    patch:
+      summary: Đổi mật khẩu
+      tags:
+        - User Management
+      security:
+        - cookieAuth: []
                 $ref: '#/components/schemas/ErrorResponse'
   
   # ==================================
@@ -284,6 +329,15 @@ paths:
         content:
           application/json:
             schema:
+              $ref: '#/components/schemas/ChangePasswordInput'
+      responses:
+        '200':
+          description: Đổi mật khẩu thành công
+          content:
+            application/json:
+              example: { "message": "Đổi mật khẩu thành công. Vui lòng đăng nhập lại." }
+        '400':
+          description: Mật khẩu không khớp hoặc quá ngắn
               $ref: '#/components/schemas/MaintenanceSetRequest'
       responses:
         '200':

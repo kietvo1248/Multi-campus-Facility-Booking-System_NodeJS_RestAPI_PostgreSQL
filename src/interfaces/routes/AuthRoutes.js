@@ -14,6 +14,7 @@ const createAuthRouter = (authController) => {
     router.get('/google/login', (req, res, next) => authController.googleLogin(req, res, next, passport));
     // 2. Route callback: Google gọi lại link này
     router.get('/google/callback', (req, res, next) => authController.googleCallback(req, res, next, passport));
+// --------------------
 
     return router;
 };
