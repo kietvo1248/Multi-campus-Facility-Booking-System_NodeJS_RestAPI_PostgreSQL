@@ -13,242 +13,271 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+// Enums (Định nghĩa các tập giá trị cố định)
 
-// ==========================================
-// 1. ENUMS (Định nghĩa các tập giá trị cố định)
-// ==========================================
-
-enum Role {
-  STUDENT
+enum UserRole {
+  ADMIN
   LECTURER
-  FACILITY_ADMIN
-}
-
-enum FacilityStatus {
-  ACTIVE      // Hoạt động
-  MAINTENANCE // Bảo trì
-  INACTIVE    // Ngưng hoạt động
-}
-
-enum ConditionStatus {
-  GOOD
-  NEEDS_REPAIR
+  STAFF
+  STUDENT
+  CLUB_LEADER
+  SECURITY
 }
 
 enum BookingStatus {
-  PENDING
-  APPROVED
-  REJECTED
-  CANCELLED
-  COMPLETED
-  EXPIRED
+  PENDING     // Chờ duyệt
+  APPROVED    // Đã duyệt
+  REJECTED    // Admin từ chối
+  CANCELLED   // User tự hủy
+  COMPLETED   // Đã xong
+  PREEMPTED   // [Logic] Bị hủy do sự kiện ưu tiên cao hơn chiếm chỗ
+  CONFLICT    // [Logic] Bị trùng lịch ngay lúc tạo (cho tuần thứ 7 bị kẹt)
 }
 
-enum MaintenanceStatus {
-  SCHEDULED
-  IN_PROGRESS
-  COMPLETED
+enum ReportCategory {
+  DAMAGE      // Hư hại cơ sở vật chất (lúc đi tuần)
+  INCIDENT    // Sự cố, xô xát (trong booking)
 }
 
-enum ReportType {
-  UTILIZATION
-  CANCELLATION_RATE
-}
-
-// ==========================================
-// 2. MODELS (Các bảng dữ liệu)
-// ==========================================
-
-// ------------------------------------------
-// 1. Nhóm Quản trị hệ thống (System & User)
-// ------------------------------------------
+// 3. Models (Các bảng)
 
 model Campus {
-  id         Int      @id @default(autoincrement()) @map("campus_id")
-  name       String   @map("campus_name") // VD: "FPTU HCM - Q9"
-  address    String
-  isActive   Boolean  @default(true) @map("is_active")
+  id        Int      @id @default(autoincrement())
+  name      String
+  address   String?
+  isActive  Boolean  @default(true)
   
-  // Quan hệ
+  // Relations
   users      User[]
+  clubs      Club[]
   facilities Facility[]
-  reports    Report[]
 
   @@map("campuses")
 }
 
 model User {
-  id           Int      @id @default(autoincrement()) @map("user_id")
+  id           Int      @id @default(autoincrement())
   email        String   @unique
-  passwordHash String?  @map("password_hash") // Null nếu login Google
-  googleId     String?  @unique @map("google_id")
-  fullName     String   @map("full_name")
-  role         Role     @default(STUDENT)
-  phoneNumber  String?  @map("phone_number")
-  isActive     Boolean  @default(true) @map("is_active")
+  passwordHash String?
+  fullName     String
+  role         UserRole
+  googleId     String?  @unique
+  phoneNumber  String?
+  isActive     Boolean  @default(true)
+  campusId     Int
   
-  campusId     Int      @map("campus_id")
-  campus       Campus   @relation(fields: [campusId], references: [id])
-
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
-
-  // Quan hệ ngược
-  bookings          Booking[]         @relation("UserBookings")
-  processedBookings Booking[]         @relation("AdminProcessed") // Admin xử lý booking
-  bookingHistory    BookingHistory[]  // Audit log
-  maintenanceLogs   MaintenanceLog[]  // Admin báo trì
+  // Relations
+  campus              Campus    @relation(fields: [campusId], references: [id])
+  bookings            Booking[]
+  reports             Report[]
+  
+  // Quan hệ 1-1: User là Leader của 1 Club (Optional vì không phải ai cũng là Leader)
+  managedClub         Club?     
+  
+  // History tracking
+  historyChanges      BookingHistory[]
+  maintenanceReported MaintenanceLog[]
 
   @@map("users")
 }
 
-// ------------------------------------------
-// 2. Nhóm Tài nguyên (Resources)
-// ------------------------------------------
+model Club {
+  id          Int     @id @default(autoincrement())
+  name        String
+  description String?
+  campusId    Int
+  leaderId    Int     @unique // Unique để đảm bảo 1 user chỉ lead 1 club
+  
+  // Relations
+  campus     Campus         @relation(fields: [campusId], references: [id])
+  leader     User           @relation(fields: [leaderId], references: [id])
+  priorities ClubPriority[]
+
+  @@map("clubs")
+}
+
+// [LOGIC 1] Độ ưu tiên theo LOẠI HÌNH HOẠT ĐỘNG (Event > Class > Meeting)
+model BookingType {
+  id             Int     @id @default(autoincrement())
+  name           String  // VD: "Sự kiện", "Lớp học"
+  priorityWeight Int     // VD: 100, 80
+  description    String?
+
+  bookings Booking[]
+
+  @@map("booking_types")
+}
+
+// [LOGIC 1] Độ ưu tiên theo ĐẶC QUYỀN CLB (Club A sở hữu Phòng B)
+model ClubPriority {
+  clubId        Int
+  facilityId    Int
+  priorityScore Int @default(10) // Điểm cộng thêm
+
+  // Relations
+  club     Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  facility Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+
+  // Composite Key (Khóa chính phức hợp)
+  @@id([clubId, facilityId])
+  @@map("club_priorities")
+}
 
 model FacilityType {
-  id          Int        @id @default(autoincrement()) @map("type_id")
-  name        String     @map("type_name") // "Meeting Room", "Lab"
+  id          Int     @id @default(autoincrement())
+  name        String
   description String?
-
-  // Quan hệ
-  facilities  Facility[]
+  
+  facilities Facility[]
 
   @@map("facility_types")
 }
 
 model Facility {
-  id           Int            @id @default(autoincrement()) @map("facility_id")
-  name         String         @map("facility_name") // "Room 301"
-  capacity     Int
-  imageUrls    Json?          @map("image_urls") // Lưu mảng link ảnh ["url1", "url2"]
-  status       FacilityStatus @default(ACTIVE)
-  description  String?        @db.Text
-  
-  campusId     Int            @map("campus_id")
-  campus       Campus         @relation(fields: [campusId], references: [id])
-  
-  typeId       Int            @map("type_id")
-  facilityType FacilityType   @relation(fields: [typeId], references: [id])
+  id          Int      @id @default(autoincrement())
+  name        String
+  capacity    Int
+  imageUrls   Json?    // Lưu mảng string url
+  status      String   // Có thể chuyển thành Enum nếu muốn (AVAILABLE, MAINTAINANCE)
+  description String?
+  campusId    Int
+  typeId      Int
 
-  createdAt    DateTime       @default(now()) @map("created_at")
-  updatedAt    DateTime       @updatedAt @map("updated_at")
-
-  // Quan hệ
-  bookings          Booking[]
-  equipment         FacilityEquipment[]
-  maintenanceLogs   MaintenanceLog[]
+  // Relations
+  campus      Campus              @relation(fields: [campusId], references: [id])
+  type        FacilityType        @relation(fields: [typeId], references: [id])
+  equipment   FacilityEquipment[]
+  priorities  ClubPriority[]
+  bookings    Booking[]
+  maintenance MaintenanceLog[]
+  reports     Report[]
+  
+  // Dùng cho BookingHistory để biết chuyển từ phòng nào
+  relocatedHistories BookingHistory[] 
 
   @@map("facilities")
 }
 
 model EquipmentType {
-  id          Int      @id @default(autoincrement()) @map("equipment_type_id")
-  name        String   // "Projector"
-  iconUrl     String?  @map("icon_url")
-  category    String   // "Electronic", "Furniture"
+  id       Int     @id @default(autoincrement())
+  name     String
+  iconUrl  String?
+  category String?
 
-  // Quan hệ
-  facilities  FacilityEquipment[]
+  equipment FacilityEquipment[]
 
   @@map("equipment_types")
 }
 
-// Bảng trung gian cho quan hệ N-N giữa Facility và Equipment
 model FacilityEquipment {
-  facilityId      Int             @map("facility_id")
-  equipmentTypeId Int             @map("equipment_type_id")
+  facilityId      Int
+  equipmentTypeId Int
+  condition       String // VD: "Good", "Broken"
   quantity        Int
-  conditionStatus ConditionStatus @default(GOOD) @map("condition_status")
 
-  facility        Facility        @relation(fields: [facilityId], references: [id], onDelete: Cascade)
-  equipmentType   EquipmentType   @relation(fields: [equipmentTypeId], references: [id], onDelete: Cascade)
+  // Relations
+  facility      Facility      @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  equipmentType EquipmentType @relation(fields: [equipmentTypeId], references: [id], onDelete: Cascade)
 
-  @@id([facilityId, equipmentTypeId]) // Khóa chính phức hợp
+  @@id([facilityId, equipmentTypeId, condition])
   @@map("facility_equipments")
 }
 
-// ------------------------------------------
-// 3. Nhóm Nghiệp vụ chính (Core Business)
-// ------------------------------------------
+// [LOGIC 4] Nhóm Booking (Cho việc đặt 10 tuần)
+model BookingGroup {
+  id          Int      @id @default(autoincrement())
+  description String?
+  totalSlots  Int
+  createdAt   DateTime @default(now())
+
+  bookings Booking[]
+
+  @@map("booking_groups")
+}
 
 model Booking {
-  id               Int           @id @default(autoincrement()) @map("booking_id")
-  startTime        DateTime      @map("start_time")
-  endTime          DateTime      @map("end_time")
-  recurringGroupId String?       @map("recurring_group_id") // UUID string để group các booking chuỗi
-  status           BookingStatus @default(PENDING)
-  purpose          String?
-  attendeeCount    Int           @map("attendee_count")
-  rejectionReason  String?       @map("rejection_reason")
-  rejectedAt       DateTime?     @map("rejected_at")
+  id             Int           @id @default(autoincrement())
+  startTime      DateTime
+  endTime        DateTime
+  status         BookingStatus @default(PENDING)
+  attendeeCount  Int?
+  
+  // Foreign Keys
+  userId         Int
+  facilityId     Int
+  bookingGroupId Int?          // Nullable vì có thể đặt lẻ 1 buổi
+  bookingTypeId  Int
 
-  userId           Int           @map("user_id")
-  user             User          @relation("UserBookings", fields: [userId], references: [id])
+  // Relations
+  user         User          @relation(fields: [userId], references: [id])
+  facility     Facility      @relation(fields: [facilityId], references: [id])
+  group        BookingGroup? @relation(fields: [bookingGroupId], references: [id])
+  bookingType  BookingType   @relation(fields: [bookingTypeId], references: [id])
+  
+  history      BookingHistory[]
+  reports      Report[] // [Logic 2] Sự cố xảy ra trong booking này
 
-  facilityId       Int           @map("facility_id")
-  facility         Facility      @relation(fields: [facilityId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  processedBy      Int?          @map("processed_by")
-  processor        User?         @relation("AdminProcessed", fields: [processedBy], references: [id])
-
-  createdAt        DateTime      @default(now()) @map("created_at")
-  updatedAt        DateTime      @updatedAt @map("updated_at")
-
-  // Quan hệ
-  history          BookingHistory[]
-
-  @@index([facilityId, startTime, endTime]) // Index để query check trùng lịch nhanh
   @@map("bookings")
 }
 
 model BookingHistory {
-  id           Int      @id @default(autoincrement()) @map("history_id")
-  oldStatus    String?  @map("old_status")
-  newStatus    String   @map("new_status")
-  changeReason String?  @map("change_reason")
-  timestamp    DateTime @default(now())
+  id                 Int           @id @default(autoincrement())
+  bookingId          Int
+  
+  oldStatus          BookingStatus
+  newStatus          BookingStatus
+  changeReason       String?       // [Logic 3] Ghi lý do bị PREEMPTED
+  
+  previousFacilityId Int?          // [Logic 4] Lưu ID phòng cũ nếu bị đổi phòng
+  changedById        Int           // Người thực hiện thay đổi
 
-  bookingId    Int      @map("booking_id")
-  booking      Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  // Relations
+  booking          Booking   @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  previousFacility Facility? @relation(fields: [previousFacilityId], references: [id])
+  changedBy        User      @relation(fields: [changedById], references: [id])
 
-  changedBy    Int      @map("changed_by")
-  changer      User     @relation(fields: [changedBy], references: [id])
+  updatedAt DateTime @default(now())
 
   @@map("booking_histories")
 }
 
-// ------------------------------------------
-// 4. Nhóm Bảo trì & Báo cáo (Management)
-// ------------------------------------------
-
 model MaintenanceLog {
-  id         Int               @id @default(autoincrement()) @map("log_id")
-  startDate  DateTime          @map("start_date")
-  endDate    DateTime?         @map("end_date")
-  reason     String
-  status     MaintenanceStatus @default(SCHEDULED)
+  id          Int      @id @default(autoincrement())
+  startDate   DateTime
+  endDate     DateTime?
+  reason      String?
+  status      String
+  facilityId  Int
+  reportedById Int
 
-  facilityId Int               @map("facility_id")
-  facility   Facility          @relation(fields: [facilityId], references: [id])
-
-  reportedBy Int               @map("reported_by")
-  reporter   User              @relation(fields: [reportedBy], references: [id])
+  facility   Facility @relation(fields: [facilityId], references: [id])
+  reportedBy User     @relation(fields: [reportedById], references: [id])
 
   @@map("maintenance_logs")
 }
 
+// [LOGIC 2] Báo cáo linh hoạt
 model Report {
-  id        Int        @id @default(autoincrement()) @map("report_id")
-  type      ReportType @map("report_type")
-  startDate DateTime   @map("start_date")
-  endDate   DateTime   @map("end_date")
-  data      Json       // Dữ liệu tính toán sẵn
+  id          Int            @id @default(autoincrement())
+  title       String
+  description String?
+  status      String         // Pending, Processing, Done
+  category    ReportCategory
+  imageUrls   Json?
   
-  campusId  Int        @map("campus_id")
-  campus    Campus     @relation(fields: [campusId], references: [id])
+  facilityId  Int
+  reporterId  Int
+  bookingId   Int?           // Nullable: Null = đi tuần thấy, Có ID = sự cố trong booking
 
-  createdAt DateTime   @default(now()) @map("created_at")
+  // Relations
+  facility Facility @relation(fields: [facilityId], references: [id])
+  reporter User     @relation(fields: [reporterId], references: [id])
+  booking  Booking? @relation(fields: [bookingId], references: [id])
+
+  createdAt DateTime @default(now())
 
   @@map("reports")
 }
