@@ -22,6 +22,9 @@ enum UserRole {
   STUDENT
   CLUB_LEADER
   SECURITY
+  FACILITY_ADMIN
+  SECURITY_GUARD
+  CAMPUS_ADMIN
 }
 
 enum BookingStatus {
@@ -130,6 +133,8 @@ model FacilityType {
   
   facilities Facility[]
 
+  isActive    Boolean    @default(true) @map("is_active")
+
   @@map("facility_types")
 }
 
@@ -151,9 +156,6 @@ model Facility {
   bookings    Booking[]
   maintenance MaintenanceLog[]
   reports     Report[]
-  
-  // Dùng cho BookingHistory để biết chuyển từ phòng nào
-  relocatedHistories BookingHistory[] 
 
   @@map("facilities")
 }
@@ -280,4 +282,41 @@ model Report {
   createdAt DateTime @default(now())
 
   @@map("reports")
+}
+
+model RelocationHistory {
+  id               Int      @id @default(autoincrement()) @map("relocation_id")
+  bookingId        Int      @map("booking_id")
+  booking          Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  fromFacilityId   Int      @map("from_facility_id")
+  toFacilityId     Int?     @map("to_facility_id")
+  reason           String   @db.Text
+  maintenanceLogId Int      @map("maintenance_log_id")
+  createdAt        DateTime @default(now()) @map("created_at")
+  @@map("relocation_history")
+}
+
+model Club {
+  id          Int      @id @default(autoincrement()) @map("club_id")
+  name        String
+  description String?
+  isActive    Boolean  @default(true) @map("is_active")
+  campusId    Int      @map("campus_id")
+  campus      Campus   @relation(fields: [campusId], references: [id])
+  leaderId    Int?     @map("leader_id")
+  leader      User?    @relation(fields: [leaderId], references: [id])
+  priorities  ClubPriority[]
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  @@map("clubs")
+}
+
+model ClubPriority {
+  clubId        Int @map("club_id")
+  facilityId    Int @map("facility_id")
+  priorityLevel Int @default(1) @map("priority_level")
+  club          Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  facility      Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  @@id([clubId, facilityId])
+  @@map("club_priorities")
 }
