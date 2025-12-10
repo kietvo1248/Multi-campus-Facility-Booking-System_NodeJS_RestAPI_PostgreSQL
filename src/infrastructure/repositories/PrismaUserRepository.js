@@ -48,6 +48,29 @@ class PrismaUserRepository extends IUserRepository {
         });
         return new User(newUser);
     }
+
+    async updateProfile(userId, { fullName, phoneNumber }) {
+        const updateData = {};
+        if (fullName) updateData.fullName = fullName;
+        if (phoneNumber) updateData.phoneNumber = phoneNumber;
+
+        const updatedUser = await this.prisma.user.update({
+            where: { id: userId },
+            data: updateData,
+            include: { campus: true }
+        });
+
+        return new User(updatedUser);
+    }
+
+    async updatePassword(userId, passwordHash) {
+        await this.prisma.user.update({
+            where: { id: userId },
+            data: { passwordHash }
+        });
+        return true;
+     }
+
     
 }
 

@@ -1,7 +1,9 @@
 class AuthController {
-    constructor(loginUserUseCase, viewUserProfileUseCase) {
+    constructor(loginUserUseCase, viewUserProfileUseCase, updateProfileUseCase, changePasswordUseCase) {
         this.loginUserUseCase = loginUserUseCase;
         this.viewUserProfileUseCase = viewUserProfileUseCase;
+        this.updateProfileUseCase = updateProfileUseCase;
+        this.changePasswordUseCase = changePasswordUseCase;
         
     }
 
