@@ -131,6 +131,56 @@ components:
           type: string
           example: "Thông tin không hợp lệ."
 
+    # 5. Maintenance: Set maintenance request
+    MaintenanceSetRequest:
+      type: object
+      required:
+        - facilityId
+        - startDate
+        - reason
+      properties:
+        facilityId:
+          type: integer
+          example: 1
+        startDate:
+          type: string
+          format: date-time
+          example: "2025-12-12T13:00:00Z"
+        endDate:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2025-12-12T15:00:00Z"
+        reason:
+          type: string
+          example: "AC maintenance"
+
+    # 6. Maintenance: Set maintenance response
+    MaintenanceSetResponse:
+      type: object
+      properties:
+        maintenanceId:
+          type: integer
+          example: 42
+        totalAffected:
+          type: integer
+          example: 3
+        results:
+          type: array
+          items:
+            type: object
+            properties:
+              bookingId:
+                type: integer
+                example: 123
+              action:
+                type: string
+                enum: [RELOCATED, CANCELLED]
+              toFacilityId:
+                type: integer
+                nullable: true
+                example: 7
+
 # --- ĐỊNH NGHĨA CÁC API (PATHS) ---
 paths:
   # ==================================
@@ -259,6 +309,20 @@ paths:
         - User Management
       security:
         - cookieAuth: []
+                $ref: '#/components/schemas/ErrorResponse'
+  
+  # ==================================
+  # 3. SET MAINTENANCE (Protected - FACILITY_ADMIN)
+  # ==================================
+  /maintenance/set:
+    post:
+      summary: Thiết lập bảo trì và tự động xử lý booking bị ảnh hưởng
+      description: >
+        Tạo MaintenanceLog cho một phòng và hệ thống sẽ tự động chuyển phòng (relocate) hoặc hủy (cancel) các booking Approved bị ảnh hưởng.
+        Yêu cầu header `Authorization: Bearer <token>` và vai trò `FACILITY_ADMIN`.
+      tags:
+        - Maintenance
+      security:
         - bearerAuth: []
       requestBody:
         required: true
@@ -274,3 +338,284 @@ paths:
               example: { "message": "Đổi mật khẩu thành công. Vui lòng đăng nhập lại." }
         '400':
           description: Mật khẩu không khớp hoặc quá ngắn
+              $ref: '#/components/schemas/MaintenanceSetRequest'
+      responses:
+        '200':
+          description: Tạo maintenance và xử lý thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MaintenanceSetResponse'
+        '400':
+          description: Thiếu trường bắt buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Chưa đăng nhập hoặc token không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Không đủ quyền FACILITY_ADMIN
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ==================================
+  # 4. RESOURCES (Protected - FACILITY_ADMIN/CAMPUS_ADMIN)
+  # ==================================
+  /campuses:
+    get:
+      summary: Lấy danh sách Campus (active)
+      tags: [Resources]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: OK }
+    post:
+      summary: Tạo Campus
+      tags: [Resources]
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                address: { type: string }
+      responses:
+        '201': { description: Created }
+  /campuses/{id}:
+    put:
+      summary: Cập nhật Campus
+      tags: [Resources]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          schema: { type: integer }
+          required: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200': { description: Updated }
+    delete:
+      summary: Soft delete Campus
+      tags: [Resources]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          schema: { type: integer }
+          required: true
+      responses:
+        '200': { description: Deleted }
+
+  /facility-types:
+    get:
+      summary: Lấy danh sách FacilityType (active)
+      tags: [Resources]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: OK }
+    post:
+      summary: Tạo FacilityType
+      tags: [Resources]
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                description: { type: string }
+      responses:
+        '201': { description: Created }
+  /facility-types/{id}:
+    put:
+      summary: Cập nhật FacilityType
+      tags: [Resources]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          schema: { type: integer }
+          required: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200': { description: Updated }
+    delete:
+      summary: Soft delete FacilityType
+      tags: [Resources]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          schema: { type: integer }
+          required: true
+      responses:
+        '200': { description: Deleted }
+
+  /facilities:
+    get:
+      summary: Lấy danh sách Facilities (active)
+      tags: [Resources]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: query
+          name: campusId
+          schema: { type: integer }
+        - in: query
+          name: typeId
+          schema: { type: integer }
+      responses:
+        '200': { description: OK }
+    post:
+      summary: Tạo Facility
+      tags: [Resources]
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '201': { description: Created }
+  /facilities/{id}:
+    put:
+      summary: Cập nhật Facility
+      tags: [Resources]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          schema: { type: integer }
+          required: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200': { description: Updated }
+    delete:
+      summary: Soft delete Facility (INACTIVE)
+      tags: [Resources]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          schema: { type: integer }
+          required: true
+      responses:
+        '200': { description: Deleted }
+
+  /clubs:
+    get:
+      summary: Lấy danh sách CLB theo campus
+      tags: [Clubs]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: query
+          name: campusId
+          schema: { type: integer }
+      responses:
+        '200': { description: OK }
+    post:
+      summary: Tạo Club
+      tags: [Clubs]
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '201': { description: Created }
+  /clubs/{id}:
+    put:
+      summary: Cập nhật Club
+      tags: [Clubs]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          schema: { type: integer }
+          required: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200': { description: Updated }
+    delete:
+      summary: Soft delete Club
+      tags: [Clubs]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          schema: { type: integer }
+          required: true
+      responses:
+        '200': { description: Deleted }
+
+  /clubs/{id}/priorities:
+    get:
+      summary: Danh sách phòng ưu tiên của CLB
+      tags: [Clubs]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: OK }
+    post:
+      summary: Gán/ cập nhật phòng ưu tiên cho CLB
+      tags: [Clubs]
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                facilityId: { type: integer }
+                priorityLevel: { type: integer }
+      responses:
+        '200': { description: Assigned }
+  /clubs/{id}/priorities/{facilityId}:
+    delete:
+      summary: Gỡ phòng ưu tiên khỏi CLB
+      tags: [Clubs]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          schema: { type: integer }
+          required: true
+        - in: path
+          name: facilityId
+          schema: { type: integer }
+          required: true
+      responses:
+        '200': { description: Removed }

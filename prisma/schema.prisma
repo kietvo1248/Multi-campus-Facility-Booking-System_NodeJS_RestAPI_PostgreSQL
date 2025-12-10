@@ -22,6 +22,9 @@ enum UserRole {
   STUDENT
   CLUB_LEADER
   SECURITY
+  FACILITY_ADMIN
+  SECURITY_GUARD
+  CAMPUS_ADMIN
 }
 
 enum BookingStatus {
@@ -81,20 +84,7 @@ model User {
   @@map("users")
 }
 
-model Club {
-  id          Int     @id @default(autoincrement())
-  name        String
-  description String?
-  campusId    Int
-  leaderId    Int     @unique // Unique để đảm bảo 1 user chỉ lead 1 club
-  
-  // Relations
-  campus     Campus         @relation(fields: [campusId], references: [id])
-  leader     User           @relation(fields: [leaderId], references: [id])
-  priorities ClubPriority[]
-
-  @@map("clubs")
-}
+ 
 
 // [LOGIC 1] Độ ưu tiên theo LOẠI HÌNH HOẠT ĐỘNG (Event > Class > Meeting)
 model BookingType {
@@ -109,19 +99,7 @@ model BookingType {
 }
 
 // [LOGIC 1] Độ ưu tiên theo ĐẶC QUYỀN CLB (Club A sở hữu Phòng B)
-model ClubPriority {
-  clubId        Int
-  facilityId    Int
-  priorityScore Int @default(10) // Điểm cộng thêm
-
-  // Relations
-  club     Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
-  facility Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
-
-  // Composite Key (Khóa chính phức hợp)
-  @@id([clubId, facilityId])
-  @@map("club_priorities")
-}
+ 
 
 model FacilityType {
   id          Int     @id @default(autoincrement())
@@ -129,6 +107,8 @@ model FacilityType {
   description String?
   
   facilities Facility[]
+
+  isActive    Boolean    @default(true) @map("is_active")
 
   @@map("facility_types")
 }
