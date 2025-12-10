@@ -58,57 +58,37 @@ class PrismaBookingRepository {
 
   async relocateBooking({ bookingId, toFacilityId, reason, maintenanceLogId }) {
     return this.prisma.$transaction(async (tx) => {
-      const booking = await tx.booking.update({
-        where: { id: bookingId },
-        data: { facilityId: toFacilityId }
-      })
+      const before = await tx.booking.findUnique({ where: { id: bookingId } })
+      const updated = await tx.booking.update({ where: { id: bookingId }, data: { facilityId: toFacilityId } })
       await tx.bookingHistory.create({
         data: {
           bookingId: bookingId,
           oldStatus: 'APPROVED',
           newStatus: 'APPROVED',
           changeReason: reason,
-          changedBy: booking.processedBy ?? booking.userId
+          previousFacilityId: before.facilityId,
+          changedById: updated.processedBy ?? updated.userId
         }
       })
-      await tx.relocationHistory.create({
-        data: {
-          bookingId: bookingId,
-          fromFacilityId: booking.facilityId,
-          toFacilityId,
-          reason,
-          maintenanceLogId
-        }
-      })
-      return booking
+      return updated
     })
   }
 
   async cancelBooking({ bookingId, reason, maintenanceLogId, changedBy }) {
     return this.prisma.$transaction(async (tx) => {
-      const booking = await tx.booking.update({
-        where: { id: bookingId },
-        data: { status: 'CANCELLED', rejectionReason: reason, rejectedAt: new Date() }
-      })
+      const before = await tx.booking.findUnique({ where: { id: bookingId } })
+      const updated = await tx.booking.update({ where: { id: bookingId }, data: { status: 'CANCELLED', rejectionReason: reason, rejectedAt: new Date() } })
       await tx.bookingHistory.create({
         data: {
           bookingId: bookingId,
           oldStatus: 'APPROVED',
           newStatus: 'CANCELLED',
           changeReason: reason,
-          changedBy
+          previousFacilityId: before.facilityId,
+          changedById: changedBy
         }
       })
-      await tx.relocationHistory.create({
-        data: {
-          bookingId: bookingId,
-          fromFacilityId: booking.facilityId,
-          toFacilityId: null,
-          reason,
-          maintenanceLogId
-        }
-      })
-      return booking
+      return updated
     })
   }
 }
