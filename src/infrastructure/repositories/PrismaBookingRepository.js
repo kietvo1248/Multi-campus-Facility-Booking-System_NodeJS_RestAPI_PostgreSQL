@@ -55,7 +55,35 @@ class PrismaBookingRepository {
     }
     return null
   }
+//-_-
+  async getConflictingBookings(facilityId, startTime, endTime) {
+    return this.prisma.booking.findMany({
+      where: {
+        facilityId,
+        status: { in: ['APPROVED', 'PENDING'] }, // Check cả Pending để tránh race condition
+        startTime: { lt: endTime },
+        endTime: { gt: startTime }
+      }
+    })
+  }
 
+  // Tạo booking
+  async create(data) {
+    return this.prisma.booking.create({
+      data: {
+        userId: data.userId,
+        facilityId: data.facilityId,
+        bookingTypeId: data.bookingTypeId,
+        startTime: data.startTime,
+        endTime: data.endTime,
+        status: data.status,
+        attendeeCount: data.attendeeCount,
+        // Prisma Schema chưa có cột purpose, bạn có thể thêm vào hoặc dùng description của BookingGroup nếu cần
+        // Tạm thời ta bỏ qua field purpose nếu DB chưa có
+      }
+    })
+  }
+//-_-
   async relocateBooking({ bookingId, toFacilityId, reason, maintenanceLogId }) {
     return this.prisma.$transaction(async (tx) => {
       const before = await tx.booking.findUnique({ where: { id: bookingId } })
