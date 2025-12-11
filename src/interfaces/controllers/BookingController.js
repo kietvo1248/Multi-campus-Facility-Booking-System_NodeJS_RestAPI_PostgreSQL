@@ -1,21 +1,18 @@
 class BookingController {
-    constructor({ findAvailableFacilities, createShortTermBooking }) {
+    constructor({ findAvailableFacilities, createShortTermBooking, getClubBookingSuggestions }) {
         this.findAvailableFacilities = findAvailableFacilities;
         this.createShortTermBooking = createShortTermBooking;
+        this.getClubBookingSuggestions = getClubBookingSuggestions;
     }
 
     // GET /bookings/search
     async search(req, res) {
         try {
             const { date, slot, typeId, capacity } = req.query;
-            const campusId = req.user.campusId; // Lấy tự động từ Token đăng nhập
+            const campusId = req.user.campusId;
 
             const result = await this.findAvailableFacilities.execute({
-                campusId, 
-                date, 
-                slot: Number(slot), 
-                typeId, 
-                capacity
+                campusId, date, slot: Number(slot), typeId, capacity
             });
             return res.status(200).json(result);
         } catch (error) {
@@ -27,17 +24,22 @@ class BookingController {
     async create(req, res) {
         try {
             const userId = req.user.id;
-            const userCampusId = req.user.campusId; // Lấy từ Token
+           // const userCampusId = req.user.campusId;
             
-            // bookingTypeId được FE gửi lên tự động tùy theo trang
-            const { facilityId, date, slot, bookingTypeId, attendeeCount, purpose } = req.body;
+            // Lấy 'slots' (số nhiều) từ body
+            const { facilityId, date, slots, bookingTypeId, purpose, attendeeCount } = req.body;
+
+            // Validate sơ bộ
+            if (!slots || !Array.isArray(slots) || slots.length === 0) {
+                return res.status(400).json({ message: "Vui lòng chọn ít nhất 1 slot." });
+            }
 
             const result = await this.createShortTermBooking.execute({
                 userId, 
-                userCampusId,
+                //userCampusId,
                 facilityId: Number(facilityId),
                 date,
-                slot: Number(slot),
+                slots: slots, // Truyền mảng slots
                 bookingTypeId: Number(bookingTypeId),
                 purpose,
                 attendeeCount: Number(attendeeCount)
@@ -45,6 +47,27 @@ class BookingController {
             return res.status(201).json(result);
         } catch (error) {
             return res.status(400).json({ message: error.message });
+        }
+    }
+
+    async suggestForClub(req, res) {
+        try {
+            const { date, slot } = req.query;
+            const userId = req.user.id;
+            const userCampusId = req.user.campusId;
+
+            // Gọi Use Case
+            const result = await this.getClubBookingSuggestions.execute({
+                userId,
+                userCampusId,
+                date,
+                slot: Number(slot)
+            });
+            return res.status(200).json(result);
+        } catch (error) {
+            // Nếu lỗi là do không phải leader -> 403, còn lại 4 xị
+            const status = error.message.includes('không phải là Chủ nhiệm') ? 403 : 400;
+            return res.status(status).json({ message: error.message });
         }
     }
 }
