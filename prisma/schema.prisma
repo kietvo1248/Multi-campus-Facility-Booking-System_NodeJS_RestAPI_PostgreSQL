@@ -18,13 +18,9 @@ datasource db {
 enum UserRole {
   ADMIN
   LECTURER
-  STAFF
   STUDENT
-  CLUB_LEADER
-  SECURITY
   FACILITY_ADMIN
   SECURITY_GUARD
-  CAMPUS_ADMIN
 }
 
 enum BookingStatus {
