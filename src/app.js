@@ -63,13 +63,15 @@ const ClubService = require('./application/resources/clubService');
 const campusService = new CampusService(campusRepository);
 const facilityTypeService = new FacilityTypeService(facilityTypeRepository);
 const facilityService = new FacilityService(facilityRepository);
-const clubService = new ClubService(clubRepository, clubPriorityRepository);
-// const CreateShortTermBooking = require('./application/bookings/createShortTermBooking');
+const clubService = new ClubService(clubRepository, clubPriorityRepository, userRepository);
+const CreateShortTermBooking = require('./application/bookings/createShortTermBooking');
+const createShortTermBooking = new CreateShortTermBooking(bookingRepository, facilityRepository, prisma);
+const FindAvailableFacilities = require('./application/bookings/findAvailableFacilities');
+const findAvailableFacilities = new FindAvailableFacilities(facilityRepository);
 // const CreateRecurringBooking = require('./application/bookings/createRecurringBooking');
-// const GetClubPrioritySuggestions = require('./application/bookings/getClubPrioritySuggestions');
-// const createShortTermBooking = new CreateShortTermBooking(prisma);
+const getClubBookingSuggestions = require('./application/bookings/getClubBookingSuggestions');
 // const createRecurringBooking = new CreateRecurringBooking(prisma);
-// const getClubPrioritySuggestions = new GetClubPrioritySuggestions(prisma);
+const getClubBookingSuggestionsUseCase = new getClubBookingSuggestions(facilityRepository, clubRepository);
 
 // --- 3. Khởi tạo Interfaces (Controllers) ---   (thêm các usecase cần thiết vào đây)
 //3.1 Authentication Controller
@@ -89,8 +91,11 @@ const createFacilityRouter = require('./interfaces/routes/FacilityRoutes');
 const facilityRouter = createFacilityRouter(resourceController);
 const createClubRouter = require('./interfaces/routes/ClubRoutes');
 const clubRouter = createClubRouter(resourceController);
-// const BookingController = require('./interfaces/controllers/BookingController');
-// const bookingController = new BookingController({ createShortTermBooking, createRecurringBooking, getClubPrioritySuggestions });
+const BookingController = require('./interfaces/controllers/BookingController');
+const bookingController = new BookingController({ 
+  createShortTermBooking: createShortTermBooking, 
+  findAvailableFacilities: findAvailableFacilities,
+  getClubBookingSuggestions: getClubBookingSuggestionsUseCase });
 // const createBookingRouter = require('./interfaces/routes/BookingRoutes');
 // const bookingRouter = createBookingRouter(bookingController);
 
@@ -104,6 +109,8 @@ const createMaintenanceRouter = require('./interfaces/routes/MaintenanceRoutes')
 const maintenanceRouter = createMaintenanceRouter(maintenanceController);
 const createResourceRouter = require('./interfaces/routes/ResourceRoutes');
 const resourceRouter = createResourceRouter(resourceController);
+const createBookingRouter = require('./interfaces/routes/BookingRoutes');
+const bookingRouter = createBookingRouter(bookingController);
 
 
 app.use(cors());
@@ -123,7 +130,7 @@ app.use('/api/campuses', campusRouter);
 app.use('/api/facility-types', facilityTypeRouter);
 app.use('/api/facilities', facilityRouter);
 app.use('/api/clubs', clubRouter);
-//app.use('/api/bookings', bookingRouter);
+app.use('/api/bookings', bookingRouter);
 // Giữ /api/resources để backward-compat nếu cần
 app.use('/api/resources', resourceRouter);
 

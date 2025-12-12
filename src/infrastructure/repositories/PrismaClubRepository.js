@@ -4,5 +4,10 @@ class PrismaClubRepository {
   create(data) { return this.prisma.club.create({ data }) }
   update(id, data) { return this.prisma.club.update({ where: { id }, data }) }
   softDelete(id) { return this.prisma.club.delete({ where: { id } }) }
+  async findByLeaderId(userId) {
+    return this.prisma.club.findUnique({
+      where: { leaderId: userId }
+    });
+  }
 }
 module.exports = PrismaClubRepository

@@ -68,8 +68,9 @@ components:
 
     ChangePasswordInput:
       type: object
-      required: [newPassword, confirmPassword]
+      required: [currentPassword, newPassword, confirmPassword]
       properties:
+        currentPassword: { type: string, format: password, example: "OldPass123" }
         newPassword: { type: string, format: password, minLength: 6, example: "NewPass123" }
         confirmPassword: { type: string, format: password, example: "NewPass123" }
 
@@ -140,6 +141,26 @@ components:
               bookingId: { type: integer }
               action: { type: string, enum: [RELOCATED, CANCELLED] }
               toFacilityId: { type: integer, nullable: true }
+
+    # 5. Booking
+    BookingInput:
+      type: object
+      required: [facilityId, date, slots, bookingTypeId]
+      properties:
+        facilityId: { type: integer, example: 1 }
+        date: { type: string, format: date, example: "2025-12-20" }
+        slots: { type: array, items: { type: integer }, example: [1, 2] }
+        bookingTypeId: { type: integer, example: 1 }
+        purpose: { type: string, example: "Họp CLB" }
+        attendeeCount: { type: integer, example: 20 }
+
+    BookingResponse:
+      type: object
+      properties:
+        id: { type: integer }
+        status: { type: string, example: "PENDING" }
+        startTime: { type: string, format: date-time }
+        endTime: { type: string, format: date-time }
 
 # --- ĐỊNH NGHĨA CÁC API (PATHS) ---
 paths:
@@ -267,7 +288,7 @@ paths:
     get:
       summary: Lấy danh sách Campus
       tags: [Resources]
-      security: []
+      security: [{ bearerAuth: [] }]
       responses:
         '200': { description: OK }
     post:
@@ -313,6 +334,7 @@ paths:
     get:
       summary: Lấy danh sách loại phòng
       tags: [Resources]
+      security: [{ bearerAuth: [] }]
       responses:
         '200': { description: OK }
     post:
@@ -326,10 +348,39 @@ paths:
       responses:
         '201': { description: Created }
 
+  /facility-types/{id}:
+    put:
+      summary: Cập nhật loại phòng
+      tags: [Resources]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/FacilityTypeInput' }
+      responses:
+        '200': { description: Updated }
+    delete:
+      summary: Xóa (Soft delete) loại phòng
+      tags: [Resources]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: Deleted }
+
   /facilities:
     get:
       summary: Lấy danh sách phòng
       tags: [Resources]
+      security: [{ bearerAuth: [] }]
       parameters:
         - in: query
           name: campusId
@@ -385,6 +436,7 @@ paths:
     get:
       summary: Lấy danh sách CLB
       tags: [Clubs]
+      security: [{ bearerAuth: [] }]
       parameters:
         - in: query
           name: campusId
@@ -474,3 +526,69 @@ paths:
           schema: { type: integer }
       responses:
         '200': { description: Removed }
+
+  # ==================================
+  # GROUP 6: BOOKINGS
+  # ==================================
+  /bookings/search:
+    get:
+      summary: Tìm phòng trống
+      tags: [Bookings]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: query
+          name: date
+          schema: { type: string, format: date }
+          required: true
+        - in: query
+          name: slot
+          schema: { type: integer }
+          required: true
+        - in: query
+          name: typeId
+          schema: { type: integer }
+        - in: query
+          name: capacity
+          schema: { type: integer }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/FacilityInput' }
+
+  /bookings:
+    post:
+      summary: Tạo yêu cầu đặt phòng
+      tags: [Bookings]
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BookingInput' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BookingResponse' }
+
+  /bookings/club-suggestions:
+    get:
+      summary: Gợi ý phòng cho CLB (dựa trên Priority)
+      tags: [Bookings]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: query
+          name: date
+          schema: { type: string, format: date }
+          required: true
+        - in: query
+          name: slot
+          schema: { type: integer }
+          required: true
+      responses:
+        '200':
+          description: OK
