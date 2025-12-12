@@ -60,9 +60,12 @@ class PrismaBookingRepository {
     return this.prisma.booking.findMany({
       where: {
         facilityId,
-        status: { in: ['APPROVED', 'PENDING'] }, // Check cả Pending để tránh race condition
+        status: { in: ['APPROVED', 'PENDING'] },
         startTime: { lt: endTime },
         endTime: { gt: startTime }
+      },
+      include: {
+        bookingType: true // Kèm thông tin loại đặt phòng để lấy priorityWeight
       }
     })
   }
@@ -82,6 +85,38 @@ class PrismaBookingRepository {
         // Tạm thời ta bỏ qua field purpose nếu DB chưa có
       }
     })
+  }
+
+  // [MỚI] Hàm xử lý chiếm chỗ (Transaction: Hủy cũ + Tạo mới)
+  async preemptAndCreate(bookingsToPreemptIds, newBookingData, reason) {
+    return this.prisma.$transaction(async (tx) => {
+        // 1. Hủy các booking cũ (Update status -> PREEMPTED)
+        if (bookingsToPreemptIds.length > 0) {
+            await tx.booking.updateMany({
+                where: { id: { in: bookingsToPreemptIds } },
+                data: { 
+                    status: 'PREEMPTED',
+                    // Lưu ý: Cần đảm bảo schema có field ghi lý do hủy nếu muốn (VD: rejectionReason)
+                }
+            });
+            
+            // (Optional) Tạo log lịch sử cho các booking bị hủy
+            // await tx.bookingHistory.createMany(...)
+        }
+
+        // 2. Tạo booking mới
+        return tx.booking.create({
+            data: {
+                userId: newBookingData.userId,
+                facilityId: newBookingData.facilityId,
+                bookingTypeId: newBookingData.bookingTypeId,
+                startTime: newBookingData.startTime,
+                endTime: newBookingData.endTime,
+                status: newBookingData.status,
+                attendeeCount: newBookingData.attendeeCount
+            }
+        });
+    });
   }
 //-_-
   async relocateBooking({ bookingId, toFacilityId, reason, maintenanceLogId }) {
