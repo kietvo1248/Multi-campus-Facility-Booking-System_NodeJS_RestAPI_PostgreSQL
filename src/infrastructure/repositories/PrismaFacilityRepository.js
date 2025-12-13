@@ -38,6 +38,19 @@ class PrismaFacilityRepository {
     });
   }
 
+  async findById(id) {
+    return this.prisma.facility.findUnique({
+      where: { id },
+      include: {
+        type: true,      // Kèm thông tin loại phòng
+        campus: true,    // Kèm thông tin campus
+        equipment: {     // Kèm danh sách thiết bị
+            include: { equipmentType: true }
+        }
+      }
+    });
+  }
+
   create(data) { return this.prisma.facility.create({ data }) }
   update(id, data) { return this.prisma.facility.update({ where: { id }, data }) }
   softDelete(id) { return this.prisma.facility.update({ where: { id }, data: { status: 'INACTIVE' } }) }

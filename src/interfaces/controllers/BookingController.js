@@ -1,8 +1,13 @@
 class BookingController {
-    constructor({ findAvailableFacilities, createShortTermBooking, getClubBookingSuggestions }) {
+    constructor({ findAvailableFacilities, createShortTermBooking, getClubBookingSuggestions,approveBooking, rejectBooking, searchBookingForCheckIn, checkInBooking, checkOutBooking }) {
         this.findAvailableFacilities = findAvailableFacilities;
         this.createShortTermBooking = createShortTermBooking;
         this.getClubBookingSuggestions = getClubBookingSuggestions;
+        this.approveBooking = approveBooking;
+        this.rejectBooking = rejectBooking;
+        this.searchBookingForCheckIn = searchBookingForCheckIn;
+        this.checkInBooking = checkInBooking;
+        this.checkOutBooking = checkOutBooking;
     }
 
     // GET /bookings/search
@@ -24,7 +29,7 @@ class BookingController {
     async create(req, res) {
         try {
             const userId = req.user.id;
-           // const userCampusId = req.user.campusId;
+            const userCampusId = req.user.campusId;
             
             // Lấy 'slots' (số nhiều) từ body
             const { facilityId, date, slots, bookingTypeId, purpose, attendeeCount } = req.body;
@@ -36,7 +41,7 @@ class BookingController {
 
             const result = await this.createShortTermBooking.execute({
                 userId, 
-                //userCampusId,
+                userCampusId,
                 facilityId: Number(facilityId),
                 date,
                 slots: slots, // Truyền mảng slots
@@ -68,6 +73,71 @@ class BookingController {
             // Nếu lỗi là do không phải leader -> 403, còn lại 4 xị
             const status = error.message.includes('không phải là Chủ nhiệm') ? 403 : 400;
             return res.status(status).json({ message: error.message });
+        }
+    }
+
+    async approve(req, res) {
+        try {
+            const bookingId = Number(req.params.id);
+            const adminId = req.user.id;
+            
+            const result = await this.approveBooking.execute(bookingId, adminId);
+            return res.json({ message: "Duyệt đơn thành công.", data: result });
+        } catch (error) {
+            return res.status(400).json({ message: error.message });
+        }
+    }
+
+    //Từ chối đơn
+    async reject(req, res) {
+        try {
+            const bookingId = Number(req.params.id);
+            const adminId = req.user.id;
+            const { reason } = req.body;
+
+            const result = await this.rejectBooking.execute(bookingId, adminId, reason);
+            return res.json({ message: "Đã từ chối đơn.", data: result });
+        } catch (error) {
+            return res.status(400).json({ message: error.message });
+        }
+    }
+
+    // bảo vệ checkin checkout
+    async searchForGuard(req, res) {
+        try {
+            // 1. Lấy dữ liệu từ Request
+            const { keyword } = req.query;
+            const campusId = req.user.campusId; // Lấy từ Token bảo vệ
+
+            // 2. Gọi Use Case (Lúc này mới truyền campusId, keyword)
+            const result = await this.searchBookingForCheckIn.execute({ campusId, keyword });
+            
+            // 3. Trả về Response
+            return res.status(200).json(result);
+        } catch (error) {
+            return res.status(400).json({ message: error.message });
+        }
+    }
+
+    async checkIn(req, res) {
+        try {
+            const bookingId = Number(req.params.id);
+            const guardId = req.user.id;
+            await this.checkInBooking.execute(bookingId, guardId);
+            return res.status(200).json({ message: "Đã xác nhận mở cửa (Check-in)." });
+        } catch (error) {
+            return res.status(400).json({ message: error.message });
+        }
+    }
+
+    async checkOut(req, res) {
+        try {
+            const bookingId = Number(req.params.id);
+            const guardId = req.user.id;
+            await this.checkOutBooking.execute(bookingId, guardId);
+            return res.status(200).json({ message: "Đã xác nhận đóng cửa (Check-out)." });
+        } catch (error) {
+            return res.status(400).json({ message: error.message });
         }
     }
 }

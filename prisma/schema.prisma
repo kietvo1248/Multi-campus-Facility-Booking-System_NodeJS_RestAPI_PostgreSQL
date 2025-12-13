@@ -214,6 +214,7 @@ model Booking {
   endTime        DateTime
   status         BookingStatus @default(PENDING)
   attendeeCount  Int?
+  isCheckedIn    Boolean       @default(false)
   
   // Foreign Keys
   userId         Int
