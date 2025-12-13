@@ -30,10 +30,37 @@ components:
     # --- INPUT MODELS ---
     LoginInput:
       type: object
-      required: [email, password]
+      required: [email, password, campusId]
       properties:
         email: { type: string, format: email, example: "admin@fpt.edu.vn" }
         password: { type: string, format: password, example: "123456" }
+        campusId: { type: integer, example: 2, description: "Campus ID (VD: 1=HN, 2=HCM)" }
+
+    User:
+      type: object
+      properties:
+        id: { type: integer, example: 1 }
+        fullName: { type: string, example: "Nguyen Van A" }
+        email: { type: string, example: "anv@fpt.edu.vn" }
+        role: { type: string, enum: [STUDENT, LECTURER, FACILITY_ADMIN, SECURITY], example: "STUDENT" }
+        campusId: { type: integer, example: 1 }
+        campusName: { type: string, example: "FPTU HCM" }
+        phoneNumber: { type: string, example: "0901234567" }
+        isActive: { type: boolean, example: true }
+
+    LoginResponse:
+      type: object
+      properties:
+        message: { type: string }
+        token: { type: string }
+        user: { $ref: '#/components/schemas/User' }
+
+    ErrorResponse:
+      type: object
+      properties:
+        message: { type: string, example: "Lỗi hệ thống hoặc dữ liệu không hợp lệ." }
+
+    # 2. User Update
     
     UpdateProfileInput:
       type: object
@@ -122,14 +149,37 @@ paths:
   # ==========================================
   /auth/login:
     post:
+      summary: Đăng nhập thường (bắt buộc chọn campus)
+      tags: [Authentication]
+      security: []
       summary: Đăng nhập Email/Pass
       tags: [1. Public & Common]
       requestBody:
+        required: true
         content:
           application/json:
             schema: { $ref: '#/components/schemas/LoginInput' }
       responses:
-        '200': { description: OK }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LoginResponse' }
+        '400':
+          description: Thiếu email/password/campusId hoặc campusId không hợp lệ
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '401':
+          description: Sai email hoặc mật khẩu
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '403':
+          description: Không thuộc campus đã chọn / tài khoản bị vô hiệu hóa / tài khoản Google-only
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
 
   /auth/google/login:
     get:
@@ -173,7 +223,12 @@ paths:
           application/json:
             schema: { $ref: '#/components/schemas/ChangePasswordInput' }
       responses:
-        '200': { description: Updated }
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              example: { "message": "Đổi mật khẩu thành công." }
+        '400': { description: Lỗi validate }
 
   # ==========================================
   # TAG 2: STUDENT & LECTURER (Standard User)
@@ -576,4 +631,5 @@ paths:
           required: true
           schema: { type: integer }
       responses:
-        '200': { description: OK }
+        '200':
+          description: OK
