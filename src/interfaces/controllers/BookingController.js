@@ -1,5 +1,6 @@
 class BookingController {
-    constructor({ findAvailableFacilities, createShortTermBooking, getClubBookingSuggestions,approveBooking, rejectBooking, searchBookingForCheckIn, checkInBooking, checkOutBooking, bookingRepository }) {
+    constructor({ findAvailableFacilities, createShortTermBooking, getClubBookingSuggestions,approveBooking, rejectBooking,
+         searchBookingForCheckIn, checkInBooking, checkOutBooking, bookingRepository, getMyBookings, getBookingDetail, cancelBookingByUser }) {
         this.findAvailableFacilities = findAvailableFacilities;
         this.createShortTermBooking = createShortTermBooking;
         this.getClubBookingSuggestions = getClubBookingSuggestions;
@@ -9,6 +10,9 @@ class BookingController {
         this.checkInBooking = checkInBooking;
         this.checkOutBooking = checkOutBooking;
         this.bookingRepository = bookingRepository;
+        this.getMyBookings = getMyBookings;
+        this.getBookingDetail = getBookingDetail;
+        this.cancelBookingByUser = cancelBookingByUser;
     }
 
     // GET /bookings/search
@@ -169,6 +173,41 @@ class BookingController {
             const guardId = req.user.id;
             await this.checkOutBooking.execute(bookingId, guardId);
             return res.status(200).json({ message: "Đã xác nhận đóng cửa (Check-out)." });
+        } catch (error) {
+            return res.status(400).json({ message: error.message });
+        }
+    }
+   // Lấy danh sách của tôi
+    async getMine(req, res) {
+        try {
+            const userId = req.user.id;
+            const result = await this.getMyBookings.execute(userId);
+            return res.status(200).json(result);
+        } catch (error) {
+            return res.status(400).json({ message: error.message });
+        }
+    }
+
+    // [MỚI] Xem chi tiết
+    async getDetail(req, res) {
+        try {
+            const bookingId = Number(req.params.id);
+            const userId = req.user.id;
+            const result = await this.getBookingDetail.execute(bookingId, userId);
+            return res.status(200).json(result);
+        } catch (error) {
+            return res.status(403).json({ message: error.message });
+        }
+    }
+
+    // [MỚI] Hủy đơn (MW7)
+    async cancel(req, res) {
+        try {
+            const bookingId = Number(req.params.id);
+            const userId = req.user.id;
+            
+            const result = await this.cancelBookingByUser.execute(bookingId, userId);
+            return res.status(200).json({ message: "Hủy đặt phòng thành công.", data: result });
         } catch (error) {
             return res.status(400).json({ message: error.message });
         }
