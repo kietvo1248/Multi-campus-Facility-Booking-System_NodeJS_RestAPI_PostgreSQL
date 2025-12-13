@@ -112,7 +112,8 @@ const bookingController = new BookingController({
   rejectBooking: rejectBookingUseCase,
   searchBookingForCheckIn: searchBookingForCheckIn,
   checkInBooking: checkInBooking,
-  checkOutBooking: checkOutBooking
+  checkOutBooking: checkOutBooking,
+  bookingRepository: bookingRepository
 });
 // const createBookingRouter = require('./interfaces/routes/BookingRoutes');
 // const bookingRouter = createBookingRouter(bookingController);
