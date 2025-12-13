@@ -40,7 +40,7 @@ class PrismaUserRepository extends IUserRepository {
                 fullName: userData.fullName,
                 googleId: userData.googleId,
                 role: userData.role,
-                campusId: userData.campusId,
+                campusId: Number(userData.campusId),
                 passwordHash: null, // không có register nên Không có mật khẩu
                 isActive: true
             },
