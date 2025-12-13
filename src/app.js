@@ -55,7 +55,7 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
   app.use(passport.initialize());
 }
 const SetMaintenance = require('./application/maintenance/setMaintenance');
-const setMaintenanceUseCase = new SetMaintenance(maintenanceRepository, bookingRepository, prisma);
+const setMaintenanceUseCase = new SetMaintenance(maintenanceRepository, bookingRepository, facilityRepository);
 const CampusService = require('./application/resources/campusService');
 const FacilityTypeService = require('./application/resources/facilityTypeService');
 const FacilityService = require('./application/resources/facilityService');
@@ -72,6 +72,18 @@ const findAvailableFacilities = new FindAvailableFacilities(facilityRepository);
 const getClubBookingSuggestions = require('./application/bookings/getClubBookingSuggestions');
 // const createRecurringBooking = new CreateRecurringBooking(prisma);
 const getClubBookingSuggestionsUseCase = new getClubBookingSuggestions(facilityRepository, clubRepository);
+// duyệt & từ chối đơn
+const ApproveBooking = require('./application/bookings/ApproveBooking');
+const approveBookingUseCase = new ApproveBooking(bookingRepository);
+const RejectBooking = require('./application/bookings/RejectBooking');
+const rejectBookingUseCase = new RejectBooking(bookingRepository);
+// Check-In & Check-Out
+const SearchBookingForCheckIn = require('./application/bookings/SearchBookingForCheckIn');
+const CheckInBooking = require('./application/bookings/CheckInBooking');
+const CheckOutBooking = require('./application/bookings/CheckOutBooking');
+const searchBookingForCheckIn = new SearchBookingForCheckIn(bookingRepository);
+const checkInBooking = new CheckInBooking(bookingRepository);
+const checkOutBooking = new CheckOutBooking(bookingRepository);
 
 // --- 3. Khởi tạo Interfaces (Controllers) ---   (thêm các usecase cần thiết vào đây)
 //3.1 Authentication Controller
@@ -95,9 +107,16 @@ const BookingController = require('./interfaces/controllers/BookingController');
 const bookingController = new BookingController({ 
   createShortTermBooking: createShortTermBooking, 
   findAvailableFacilities: findAvailableFacilities,
-  getClubBookingSuggestions: getClubBookingSuggestionsUseCase });
+  getClubBookingSuggestions: getClubBookingSuggestionsUseCase,
+  approveBooking: approveBookingUseCase,
+  rejectBooking: rejectBookingUseCase,
+  searchBookingForCheckIn: searchBookingForCheckIn,
+  checkInBooking: checkInBooking,
+  checkOutBooking: checkOutBooking
+});
 // const createBookingRouter = require('./interfaces/routes/BookingRoutes');
 // const bookingRouter = createBookingRouter(bookingController);
+
 
 // --- 4. Setup Routes ---
 //4.1 Authentication Routes
