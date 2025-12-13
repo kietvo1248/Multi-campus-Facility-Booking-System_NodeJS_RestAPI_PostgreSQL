@@ -34,6 +34,14 @@ const createBookingRouter = (bookingController) => {
     // List conflicts (Admin)
     router.get('/conflicts', authenticate, authorize(['FACILITY_ADMIN', 'CAMPUS_ADMIN']), (req, res) => bookingController.listConflicts(req, res));
 
+    // Xem đơn của mình
+    router.get('/me', authenticate, authorize(['STUDENT', 'LECTURER', 'CLUB_LEADER']), (req, res) => bookingController.getMine(req, res));
+
+    // [MỚI] Xem chi tiết 
+    router.get('/:id', authenticate, authorize(['STUDENT', 'LECTURER', 'CLUB_LEADER']), (req, res) => bookingController.getDetail(req, res));
+
+    // [MỚI] Hủy đơn (MW7)
+    router.patch('/:id/cancel', authenticate, authorize(['STUDENT', 'LECTURER', 'CLUB_LEADER']), (req, res) => bookingController.cancel(req, res));
     return router;
 };
 

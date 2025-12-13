@@ -76,19 +76,8 @@ class AuthController {
   googleLogin(req, res, next, passport) {
     const { campusId } = req.query;
 
-<<<<<<< Updated upstream
     // Encode state để truyền campusId đi
     const state = Buffer.from(JSON.stringify({ campusId })).toString("base64");
-=======
-    googleLogin(req, res, next, passport) {
-        const { campusId } = req.query;
-        
-        // Parse campusId từ string sang number
-        const parsedCampusId = campusId ? Number(campusId) : null;
-        
-        // Encode state để truyền campusId đi
-        const state = Buffer.from(JSON.stringify({ campusId: parsedCampusId })).toString('base64');
->>>>>>> Stashed changes
 
     passport.authenticate("google", {
       scope: ["profile", "email"],

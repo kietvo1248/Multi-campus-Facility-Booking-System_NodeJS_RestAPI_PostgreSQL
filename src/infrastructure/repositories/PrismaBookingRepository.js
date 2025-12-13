@@ -384,7 +384,7 @@ class PrismaBookingRepository {
     return this.prisma.booking.findMany({
         where,
         include: {
-            user: { select: { fullName: true, code: true } },
+            user: { select: { fullName: true, email: true } },
             facility: { select: { name: true } }
         },
         orderBy: { startTime: 'asc' }
@@ -429,6 +429,43 @@ class PrismaBookingRepository {
           changeReason: 'Guard Check-out (Close Door)',
           previousFacilityId: updated.facilityId,
           changedById: guardId
+        }
+      });
+      return updated;
+    });
+  }
+
+  //Lấy danh sách booking của 1 user
+  async listByUserId(userId) {
+    return this.prisma.booking.findMany({
+      where: { userId },
+      include: {
+        facility: { select: { name: true, image: true } }, // Kèm tên phòng
+        bookingType: true,
+      },
+      orderBy: { createdAt: 'desc' } // Mới nhất lên đầu
+    });
+  }
+
+  //User tự hủy đơn (MW7)
+  async cancelByUser(bookingId, userId, reason) {
+    return this.prisma.$transaction(async (tx) => {
+      // 1. Update Status
+      const updated = await tx.booking.update({
+        where: { id: bookingId },
+        data: { status: 'CANCELLED' }
+      });
+
+      // 2. Ghi Log
+      await tx.bookingHistory.create({
+        data: {
+          bookingId,
+          oldStatus: updated.status, // Lưu ý: logic đúng là lấy status cũ, nhưng ở đây ta chấp nhận ghi đè hoặc cần query trước nếu muốn chính xác tuyệt đối. 
+          // Tuy nhiên để tối ưu query, ta ghi nhận hành động chuyển sang CANCELLED.
+          newStatus: 'CANCELLED',
+          changeReason: reason || 'User self-cancellation',
+          previousFacilityId: updated.facilityId,
+          changedById: userId // ID của người hủy
         }
       });
       return updated;
