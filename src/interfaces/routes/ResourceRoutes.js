@@ -14,7 +14,10 @@ const createResourceRouter = (controller) => {
   router.put('/facility-types/:id', authenticate, authorize(['FACILITY_ADMIN','CAMPUS_ADMIN']), (req, res) => controller.updateFacilityType(req, res))
   router.delete('/facility-types/:id', authenticate, authorize(['FACILITY_ADMIN','CAMPUS_ADMIN']), (req, res) => controller.softDeleteFacilityType(req, res))
 
-  router.get('/facilities', authenticate, authorize(['FACILITY_ADMIN','CAMPUS_ADMIN', 'STUDENT', 'LECTURER']), (req, res) => controller.listFacilities(req, res))
+  
+  router.get('/facilities', authenticate, authorize(['FACILITY_ADMIN','CAMPUS_ADMIN', 'STUDENT', 'LECTURER', 'CLUB_LEADER']), (req, res) => controller.listFacilities(req, res));
+
+  router.get('/facilities/:id', authenticate, authorize(['FACILITY_ADMIN','CAMPUS_ADMIN', 'STUDENT', 'LECTURER', 'CLUB_LEADER']), (req, res) => controller.getFacilityDetail(req, res));
   router.post('/facilities', authenticate, authorize(['FACILITY_ADMIN','CAMPUS_ADMIN']), (req, res) => controller.createFacility(req, res))
   router.put('/facilities/:id', authenticate, authorize(['FACILITY_ADMIN','CAMPUS_ADMIN']), (req, res) => controller.updateFacility(req, res))
   router.delete('/facilities/:id', authenticate, authorize(['FACILITY_ADMIN','CAMPUS_ADMIN']), (req, res) => controller.softDeleteFacility(req, res))

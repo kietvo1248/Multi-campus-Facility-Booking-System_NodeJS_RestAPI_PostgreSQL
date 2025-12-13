@@ -16,7 +16,35 @@ class ResourceController {
   async updateFacilityType(req, res) { try { const data = await this.facilityTypeService.update(Number(req.params.id), req.body); res.status(200).json(data) } catch (e) { res.status(500).json({ message: e.message }) } }
   async softDeleteFacilityType(req, res) { try { const data = await this.facilityTypeService.softDelete(Number(req.params.id)); res.status(200).json(data) } catch (e) { res.status(500).json({ message: e.message }) } }
 
-  async listFacilities(req, res) { try { const data = await this.facilityService.list(req.query); res.status(200).json(data) } catch (e) { res.status(500).json({ message: e.message }) } }
+  async listFacilities(req, res) { 
+    try { 
+        const filters = req.query;
+        
+        // LOGIC MỚI: Nếu là Student/Lecturer, ép buộc lọc theo Campus của họ
+        if (req.user.role === 'STUDENT' || req.user.role === 'LECTURER' || req.user.role === 'CLUB_LEADER') {
+            filters.campusId = req.user.campusId;
+        }
+
+        const data = await this.facilityService.list(filters); 
+        res.status(200).json(data);
+    } catch (e) { 
+        res.status(500).json({ message: e.message });
+    } 
+  }
+
+  async getFacilityDetail(req, res) {
+    try {
+        const id = Number(req.params.id);
+        const data = await this.facilityService.getDetail(id);
+        
+        // Bảo mật: Nếu sinh viên cố tình xem ID phòng khác campus -> Chặn (Optional)
+        // if (req.user.role === 'STUDENT' && data.campusId !== req.user.campusId) ...
+
+        res.status(200).json(data);
+    } catch (e) {
+        res.status(404).json({ message: e.message });
+    }
+  }
   async createFacility(req, res) { try { const data = await this.facilityService.create(req.body); res.status(201).json(data) } catch (e) { res.status(500).json({ message: e.message }) } }
   async updateFacility(req, res) { try { const data = await this.facilityService.update(Number(req.params.id), req.body); res.status(200).json(data) } catch (e) { res.status(500).json({ message: e.message }) } }
   async softDeleteFacility(req, res) { try { const data = await this.facilityService.softDelete(Number(req.params.id)); res.status(200).json(data) } catch (e) { res.status(500).json({ message: e.message }) } }
