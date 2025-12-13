@@ -6,17 +6,17 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('🌱 Start seeding database...');
 
-  // --- 0. Chuẩn bị Password Hash (Dùng chung cho tất cả user để chạy cho nhanh) ---
+  // --- 0. Chuẩn bị Password Hash ---
   const salt = await bcrypt.genSalt(10);
   const commonPassword = await bcrypt.hash('123456', salt); // Pass mặc định: 123456
 
   // --- 1. Tạo Campus ---
   console.log('Creating Campuses...');
   const campusHL = await prisma.campus.create({
-    data: { name: 'FPTU Hoa Lac', address: 'Khu CNC Hoa Lac, Ha Noi' }
+    data: { name: 'FPTU Hoa Lac', address: 'Khu CNC Hoa Lac, Ha Noi', isActive: true }
   });
   const campusHCM = await prisma.campus.create({
-    data: { name: 'FPTU Ho Chi Minh', address: 'Khu CNC, Thu Duc, TP.HCM' }
+    data: { name: 'FPTU Ho Chi Minh', address: 'Khu CNC, Thu Duc, TP.HCM', isActive: true }
   });
 
   // --- 2. Tạo Master Data (Types) ---
@@ -29,10 +29,10 @@ async function main() {
   const ftSport = await prisma.facilityType.create({ data: { name: 'Sân thể thao', description: 'Sân bóng, sân cầu lông' } });
 
   // 2.2 Booking Types (Quy định độ ưu tiên)
-  const btEvent = await prisma.bookingType.create({ data: { name: 'Sự kiện lớn', priorityWeight: 100 } });
-  const btClass = await prisma.bookingType.create({ data: { name: 'Lớp học chính quy', priorityWeight: 80 } });
-  const btClub = await prisma.bookingType.create({ data: { name: 'Sinh hoạt CLB', priorityWeight: 50 } });
-  const btSelf = await prisma.bookingType.create({ data: { name: 'Tự học', priorityWeight: 10 } });
+  await prisma.bookingType.create({ data: { name: 'Sự kiện lớn', priorityWeight: 100 } });
+  await prisma.bookingType.create({ data: { name: 'Lớp học chính quy', priorityWeight: 80 } });
+  await prisma.bookingType.create({ data: { name: 'Sinh hoạt CLB', priorityWeight: 50 } });
+  await prisma.bookingType.create({ data: { name: 'Tự học', priorityWeight: 10 } });
 
   // 2.3 Equipment Types
   const etProjector = await prisma.equipmentType.create({ data: { name: 'Máy chiếu', category: 'Visual' } });
@@ -50,7 +50,7 @@ async function main() {
           email: `${prefixEmail}${idx}@fpt.edu.vn`,
           fullName: `${role} ${idx} - ${campusId === campusHL.id ? 'HL' : 'HCM'}`,
           passwordHash: commonPassword,
-          role: role,
+          role: role, // Sử dụng Enum chuẩn: ADMIN, LECTURER, STUDENT...
           campusId: campusId,
           isActive: true
         }
@@ -64,45 +64,52 @@ async function main() {
   console.log('Creating Users per Campus...');
 
   // 4.1 Users Hòa Lạc
-  await createUsers(campusHL.id, 'STAFF', 2, 'staff_hl');    // 2 Quản lý
-  await createUsers(campusHL.id, 'SECURITY', 2, 'sec_hl');   // 2 Bảo vệ
-  await createUsers(campusHL.id, 'LECTURER', 3, 'lec_hl');   // 3 Giảng viên
-  const studentsHL = await createUsers(campusHL.id, 'STUDENT', 6, 'stu_hl'); // 6 Sinh viên
+  // Lưu ý: Đổi 'STAFF' thành 'FACILITY_ADMIN' theo đúng Enum mới
+  await createUsers(campusHL.id, 'FACILITY_ADMIN', 2, 'admin_hl'); 
+  await createUsers(campusHL.id, 'SECURITY_GUARD', 2, 'sec_hl');   
+  await createUsers(campusHL.id, 'LECTURER', 3, 'lec_hl');   
+  const studentsHL = await createUsers(campusHL.id, 'STUDENT', 6, 'stu_hl'); 
 
   // 4.2 Users HCM
-  await createUsers(campusHCM.id, 'STAFF', 2, 'staff_hcm');
-  await createUsers(campusHCM.id, 'SECURITY', 2, 'sec_hcm');
+  await createUsers(campusHCM.id, 'FACILITY_ADMIN', 2, 'admin_hcm');
+  await createUsers(campusHCM.id, 'SECURITY_GUARD', 2, 'sec_hcm');
   await createUsers(campusHCM.id, 'LECTURER', 3, 'lec_hcm');
   const studentsHCM = await createUsers(campusHCM.id, 'STUDENT', 6, 'stu_hcm');
 
-  // --- 5. Tạo Clubs & Update Leader Role ---
+  // --- 5. Tạo Clubs & Gán Student làm Leader ---
   console.log('Creating Clubs...');
 
   // Helper tạo Club
   const createClub = async (name, campusId, studentLeader) => {
-    // 1. Update role sinh viên thành CLUB_LEADER
-    await prisma.user.update({
-      where: { id: studentLeader.id },
-      data: { role: 'CLUB_LEADER' }
-    });
-    // 2. Tạo Club
-    return await prisma.club.create({
+    // 1. Tạo Club và link với student (role vẫn là STUDENT)
+    const club = await prisma.club.create({
       data: {
         name: name,
+        code: name.toUpperCase().replace(/\s/g, ''), // Tạo code tự động: JS CLUB -> JSCLUB
         description: `Câu lạc bộ ${name} tại campus`,
         campusId: campusId,
         leaderId: studentLeader.id
       }
     });
+
+    // 2. Cập nhật FullName của sinh viên để nhận biết là Leader
+    await prisma.user.update({
+      where: { id: studentLeader.id },
+      data: { 
+        fullName: `(Leader ${club.code}) ${studentLeader.fullName}` 
+      }
+    });
+
+    return club;
   };
 
   // CLB Hòa Lạc (Lấy 2 sv đầu tiên làm leader)
-  const clubCodeHL = await createClub('JS Club HL', campusHL.id, studentsHL[0]);
-  const clubMusicHL = await createClub('Melody Club HL', campusHL.id, studentsHL[1]);
+  const clubCodeHL = await createClub('F-Code', campusHL.id, studentsHL[0]);
+  const clubMusicHL = await createClub('Melody', campusHL.id, studentsHL[1]);
 
   // CLB HCM (Lấy 2 sv đầu tiên làm leader)
-  const clubBasketHCM = await createClub('Basketball HCM', campusHCM.id, studentsHCM[0]);
-  const clubEventHCM = await createClub('Event Org HCM', campusHCM.id, studentsHCM[1]);
+  const clubBasketHCM = await createClub('Basketball', campusHCM.id, studentsHCM[0]);
+  const clubEventHCM = await createClub('Event Organizer', campusHCM.id, studentsHCM[1]);
 
   // --- 6. Tạo Facilities (Phòng ốc) ---
   console.log('Creating Facilities...');
@@ -114,7 +121,7 @@ async function main() {
         campusId,
         typeId,
         capacity,
-        status: 'AVAILABLE',
+        status: 'ACTIVE', // Dùng string 'ACTIVE' khớp với logic repository
         description: `Phòng ${name} đầy đủ tiện nghi`,
         imageUrls: ["https://via.placeholder.com/300"]
       }
@@ -150,7 +157,8 @@ async function main() {
     data: {
       clubId: clubBasketHCM.id,
       facilityId: hcmField.id,
-      priorityScore: 50
+      priorityScore: 50,
+      note: "CLB Bóng rổ tập luyện T3, T5"
     }
   });
 
@@ -159,7 +167,8 @@ async function main() {
     data: {
       clubId: clubMusicHL.id,
       facilityId: hlHall.id,
-      priorityScore: 30
+      priorityScore: 30,
+      note: "CLB Nhạc tập duyệt sự kiện"
     }
   });
 

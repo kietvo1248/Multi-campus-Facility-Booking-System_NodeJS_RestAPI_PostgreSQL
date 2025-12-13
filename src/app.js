@@ -19,6 +19,20 @@ app.use(cookieParser());
 const prisma = new PrismaClient();
 const PrismaUserRepository = require('./infrastructure/repositories/PrismaUserRepository');
 const userRepository = new PrismaUserRepository(prisma);
+const PrismaMaintenanceRepository = require('./infrastructure/repositories/PrismaMaintenanceRepository');
+const maintenanceRepository = new PrismaMaintenanceRepository(prisma);
+const PrismaBookingRepository = require('./infrastructure/repositories/PrismaBookingRepository');
+const bookingRepository = new PrismaBookingRepository(prisma);
+const PrismaCampusRepository = require('./infrastructure/repositories/PrismaCampusRepository');
+const campusRepository = new PrismaCampusRepository(prisma);
+const PrismaFacilityTypeRepository = require('./infrastructure/repositories/PrismaFacilityTypeRepository');
+const facilityTypeRepository = new PrismaFacilityTypeRepository(prisma);
+const PrismaFacilityRepository = require('./infrastructure/repositories/PrismaFacilityRepository');
+const facilityRepository = new PrismaFacilityRepository(prisma);
+const PrismaClubRepository = require('./infrastructure/repositories/PrismaClubRepository');
+const clubRepository = new PrismaClubRepository(prisma);
+const PrismaClubPriorityRepository = require('./infrastructure/repositories/PrismaClubPriorityRepository');
+const clubPriorityRepository = new PrismaClubPriorityRepository(prisma);
 
 // --- 2. Khởi tạo Application (Use Cases) ---
 //2.1 Authentication Use Cases
@@ -33,13 +47,43 @@ const updateProfileUseCase = new UpdateUserProfile(userRepository);
 const UpdateUserPassword = require('./application/auth/changePassword');
 const updatePasswordUseCase = new UpdateUserPassword(userRepository);
 
-
-
 // --- Setup Passport Service ---
 const PassportService = require('./infrastructure/services/PassportService');
 const passportService = new PassportService(loginGoogleUserUseCase);
-passportService.initialize(); // Cấu hình Strategy
-app.use(passport.initialize()); // Middleware của Express
+if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+  passportService.initialize();
+  app.use(passport.initialize());
+}
+const SetMaintenance = require('./application/maintenance/setMaintenance');
+const setMaintenanceUseCase = new SetMaintenance(maintenanceRepository, bookingRepository, facilityRepository);
+const CampusService = require('./application/resources/campusService');
+const FacilityTypeService = require('./application/resources/facilityTypeService');
+const FacilityService = require('./application/resources/facilityService');
+const ClubService = require('./application/resources/clubService');
+const campusService = new CampusService(campusRepository);
+const facilityTypeService = new FacilityTypeService(facilityTypeRepository);
+const facilityService = new FacilityService(facilityRepository);
+const clubService = new ClubService(clubRepository, clubPriorityRepository, userRepository);
+const CreateShortTermBooking = require('./application/bookings/createShortTermBooking');
+const createShortTermBooking = new CreateShortTermBooking(bookingRepository, facilityRepository, prisma);
+const FindAvailableFacilities = require('./application/bookings/findAvailableFacilities');
+const findAvailableFacilities = new FindAvailableFacilities(facilityRepository);
+// const CreateRecurringBooking = require('./application/bookings/createRecurringBooking');
+const getClubBookingSuggestions = require('./application/bookings/getClubBookingSuggestions');
+// const createRecurringBooking = new CreateRecurringBooking(prisma);
+const getClubBookingSuggestionsUseCase = new getClubBookingSuggestions(facilityRepository, clubRepository);
+// duyệt & từ chối đơn
+const ApproveBooking = require('./application/bookings/ApproveBooking');
+const approveBookingUseCase = new ApproveBooking(bookingRepository);
+const RejectBooking = require('./application/bookings/RejectBooking');
+const rejectBookingUseCase = new RejectBooking(bookingRepository);
+// Check-In & Check-Out
+const SearchBookingForCheckIn = require('./application/bookings/SearchBookingForCheckIn');
+const CheckInBooking = require('./application/bookings/CheckInBooking');
+const CheckOutBooking = require('./application/bookings/CheckOutBooking');
+const searchBookingForCheckIn = new SearchBookingForCheckIn(bookingRepository);
+const checkInBooking = new CheckInBooking(bookingRepository);
+const checkOutBooking = new CheckOutBooking(bookingRepository);
 
 // --- 3. Khởi tạo Interfaces (Controllers) ---   (thêm các usecase cần thiết vào đây)
 //3.1 Authentication Controller
@@ -47,6 +91,32 @@ const AuthController = require('./interfaces/controllers/AuthController');
 const authController = new AuthController(loginUserUseCase, viewUserProfileUseCase, loginGoogleUserUseCase);
 const UserController = require('./interfaces/controllers/UserController');
 const userController = new UserController(updateProfileUseCase, updatePasswordUseCase);
+const MaintenanceController = require('./interfaces/controllers/MaintenanceController');
+const maintenanceController = new MaintenanceController(setMaintenanceUseCase);
+const ResourceController = require('./interfaces/controllers/ResourceController');
+const resourceController = new ResourceController({ campusService, facilityTypeService, facilityService, clubService });
+const createCampusRouter = require('./interfaces/routes/CampusRoutes');
+const campusRouter = createCampusRouter(resourceController);
+const createFacilityTypeRouter = require('./interfaces/routes/FacilityTypeRoutes');
+const facilityTypeRouter = createFacilityTypeRouter(resourceController);
+const createFacilityRouter = require('./interfaces/routes/FacilityRoutes');
+const facilityRouter = createFacilityRouter(resourceController);
+const createClubRouter = require('./interfaces/routes/ClubRoutes');
+const clubRouter = createClubRouter(resourceController);
+const BookingController = require('./interfaces/controllers/BookingController');
+const bookingController = new BookingController({ 
+  createShortTermBooking: createShortTermBooking, 
+  findAvailableFacilities: findAvailableFacilities,
+  getClubBookingSuggestions: getClubBookingSuggestionsUseCase,
+  approveBooking: approveBookingUseCase,
+  rejectBooking: rejectBookingUseCase,
+  searchBookingForCheckIn: searchBookingForCheckIn,
+  checkInBooking: checkInBooking,
+  checkOutBooking: checkOutBooking
+});
+// const createBookingRouter = require('./interfaces/routes/BookingRoutes');
+// const bookingRouter = createBookingRouter(bookingController);
+
 
 // --- 4. Setup Routes ---
 //4.1 Authentication Routes
@@ -54,6 +124,12 @@ const createAuthRouter = require('./interfaces/routes/AuthRoutes');
 const authRouter = createAuthRouter(authController);
 const createUserRouter = require('./interfaces/routes/UserRoutes');
 const userRouter = createUserRouter(userController);
+const createMaintenanceRouter = require('./interfaces/routes/MaintenanceRoutes');
+const maintenanceRouter = createMaintenanceRouter(maintenanceController);
+const createResourceRouter = require('./interfaces/routes/ResourceRoutes');
+const resourceRouter = createResourceRouter(resourceController);
+const createBookingRouter = require('./interfaces/routes/BookingRoutes');
+const bookingRouter = createBookingRouter(bookingController);
 
 
 app.use(cors());
@@ -67,6 +143,15 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 // Gắn routes
 app.use('/api/auth', authRouter);
 app.use('/api/users', userRouter);
+app.use('/api/maintenance', maintenanceRouter);
+// Mount theo entity riêng
+app.use('/api/campuses', campusRouter);
+app.use('/api/facility-types', facilityTypeRouter);
+app.use('/api/facilities', facilityRouter);
+app.use('/api/clubs', clubRouter);
+app.use('/api/bookings', bookingRouter);
+// Giữ /api/resources để backward-compat nếu cần
+app.use('/api/resources', resourceRouter);
 
 // Health check
 app.get('/health', (req, res) => res.send('Server is healthy'));

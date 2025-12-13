@@ -18,10 +18,9 @@ datasource db {
 enum UserRole {
   ADMIN
   LECTURER
-  STAFF
   STUDENT
-  CLUB_LEADER
-  SECURITY
+  FACILITY_ADMIN
+  SECURITY_GUARD
 }
 
 enum BookingStatus {
@@ -81,20 +80,7 @@ model User {
   @@map("users")
 }
 
-model Club {
-  id          Int     @id @default(autoincrement())
-  name        String
-  description String?
-  campusId    Int
-  leaderId    Int     @unique // Unique để đảm bảo 1 user chỉ lead 1 club
-  
-  // Relations
-  campus     Campus         @relation(fields: [campusId], references: [id])
-  leader     User           @relation(fields: [leaderId], references: [id])
-  priorities ClubPriority[]
-
-  @@map("clubs")
-}
+ 
 
 // [LOGIC 1] Độ ưu tiên theo LOẠI HÌNH HOẠT ĐỘNG (Event > Class > Meeting)
 model BookingType {
@@ -108,18 +94,43 @@ model BookingType {
   @@map("booking_types")
 }
 
-// [LOGIC 1] Độ ưu tiên theo ĐẶC QUYỀN CLB (Club A sở hữu Phòng B)
-model ClubPriority {
-  clubId        Int
-  facilityId    Int
-  priorityScore Int @default(10) // Điểm cộng thêm
+model Club {
+  id          Int      @id @default(autoincrement())
+  code        String   @unique // Mã CLB (VD: F-Code, JS)
+  name        String
+  description String?
+  
+  // Foreign Keys
+  campusId    Int
+  leaderId    Int?     @unique // Quan hệ 1-1 với User (Leader), nullable nếu chưa có leader
 
   // Relations
-  club     Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
-  facility Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  campus      Campus         @relation(fields: [campusId], references: [id])
+  leader      User?          @relation(fields: [leaderId], references: [id]) // Đối ứng với User.managedClub
+  priorities  ClubPriority[] // Đối ứng với quan hệ trong ClubPriority
 
-  // Composite Key (Khóa chính phức hợp)
-  @@id([clubId, facilityId])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("clubs")
+}
+
+// [LOGIC 1] Độ ưu tiên theo ĐẶC QUYỀN CLB (Club A sở hữu Phòng B)
+ 
+ model ClubPriority {
+  id            Int      @id @default(autoincrement())
+  clubId        Int
+  facilityId    Int
+  
+  priorityScore Int      @default(0) // Điểm ưu tiên. Ví dụ: 100 là chủ sở hữu, 0 là bình thường.
+  note          String?  // Ghi chú (VD: "Sở hữu phòng Mirror vào T3, T5")
+
+  // Relations
+  club          Club     @relation(fields: [clubId], references: [id])
+  facility      Facility @relation(fields: [facilityId], references: [id]) // Đối ứng với Facility.priorities
+
+  // Đảm bảo 1 Club chỉ có 1 mức ưu tiên cho 1 Phòng cụ thể
+  @@unique([clubId, facilityId]) 
   @@map("club_priorities")
 }
 
@@ -129,6 +140,8 @@ model FacilityType {
   description String?
   
   facilities Facility[]
+
+  isActive    Boolean    @default(true) @map("is_active")
 
   @@map("facility_types")
 }
@@ -201,6 +214,7 @@ model Booking {
   endTime        DateTime
   status         BookingStatus @default(PENDING)
   attendeeCount  Int?
+  isCheckedIn    Boolean       @default(false)
   
   // Foreign Keys
   userId         Int
