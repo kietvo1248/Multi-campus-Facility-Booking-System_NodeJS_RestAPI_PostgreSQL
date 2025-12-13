@@ -1,5 +1,5 @@
 class BookingController {
-    constructor({ findAvailableFacilities, createShortTermBooking, getClubBookingSuggestions,approveBooking, rejectBooking, searchBookingForCheckIn, checkInBooking, checkOutBooking }) {
+    constructor({ findAvailableFacilities, createShortTermBooking, getClubBookingSuggestions,approveBooking, rejectBooking, searchBookingForCheckIn, checkInBooking, checkOutBooking, bookingRepository }) {
         this.findAvailableFacilities = findAvailableFacilities;
         this.createShortTermBooking = createShortTermBooking;
         this.getClubBookingSuggestions = getClubBookingSuggestions;
@@ -8,13 +8,14 @@ class BookingController {
         this.searchBookingForCheckIn = searchBookingForCheckIn;
         this.checkInBooking = checkInBooking;
         this.checkOutBooking = checkOutBooking;
+        this.bookingRepository = bookingRepository;
     }
 
     // GET /bookings/search
     async search(req, res) {
         try {
             const { date, slot, typeId, capacity } = req.query;
-            const campusId = req.user.campusId;
+            const campusId = Number(req.user.campusId);
 
             const result = await this.findAvailableFacilities.execute({
                 campusId, date, slot: Number(slot), typeId, capacity
@@ -29,7 +30,7 @@ class BookingController {
     async create(req, res) {
         try {
             const userId = req.user.id;
-            const userCampusId = req.user.campusId;
+            const userCampusId = Number(req.user.campusId);
             
             // Lấy 'slots' (số nhiều) từ body
             const { facilityId, date, slots, bookingTypeId, purpose, attendeeCount } = req.body;
@@ -59,7 +60,7 @@ class BookingController {
         try {
             const { date, slot } = req.query;
             const userId = req.user.id;
-            const userCampusId = req.user.campusId;
+            const userCampusId = Number(req.user.campusId);
 
             // Gọi Use Case
             const result = await this.getClubBookingSuggestions.execute({
@@ -73,6 +74,38 @@ class BookingController {
             // Nếu lỗi là do không phải leader -> 403, còn lại 4 xị
             const status = error.message.includes('không phải là Chủ nhiệm') ? 403 : 400;
             return res.status(status).json({ message: error.message });
+        }
+    }
+
+    async listPendingApprovals(req, res) {
+        try {
+            const campusId = req.query.campusId ? Number(req.query.campusId) : Number(req.user.campusId);
+            
+            if (!campusId || isNaN(campusId)) {
+                return res.status(400).json({ message: 'Campus ID là bắt buộc' });
+            }
+
+            const bookings = await this.bookingRepository.findPendingByCampus(campusId);
+            return res.status(200).json(bookings);
+        } catch (error) {
+            console.error('Error listing pending approvals:', error);
+            return res.status(500).json({ message: error.message });
+        }
+    }
+
+    async listConflicts(req, res) {
+        try {
+            const campusId = req.query.campusId ? Number(req.query.campusId) : Number(req.user.campusId);
+            
+            if (!campusId || isNaN(campusId)) {
+                return res.status(400).json({ message: 'Campus ID là bắt buộc' });
+            }
+
+            const conflicts = await this.bookingRepository.findConflictsByCampus(campusId);
+            return res.status(200).json(conflicts);
+        } catch (error) {
+            console.error('Error listing conflicts:', error);
+            return res.status(500).json({ message: error.message });
         }
     }
 
@@ -107,7 +140,7 @@ class BookingController {
         try {
             // 1. Lấy dữ liệu từ Request
             const { keyword } = req.query;
-            const campusId = req.user.campusId; // Lấy từ Token bảo vệ
+            const campusId = Number(req.user.campusId); // Lấy từ Token bảo vệ
 
             // 2. Gọi Use Case (Lúc này mới truyền campusId, keyword)
             const result = await this.searchBookingForCheckIn.execute({ campusId, keyword });

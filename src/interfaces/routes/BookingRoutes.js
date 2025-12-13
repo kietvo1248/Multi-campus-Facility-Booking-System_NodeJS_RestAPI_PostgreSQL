@@ -28,6 +28,12 @@ const createBookingRouter = (bookingController) => {
     router.patch('/:id/check-in', authenticate, authorize(['SECURITY_GUARD']), (req, res) => bookingController.checkIn(req, res));
     router.patch('/:id/check-out', authenticate, authorize(['SECURITY_GUARD']), (req, res) => bookingController.checkOut(req, res));
 
+    // List pending approvals (Admin)
+    router.get('/pending-approvals', authenticate, authorize(['FACILITY_ADMIN', 'CAMPUS_ADMIN']), (req, res) => bookingController.listPendingApprovals(req, res));
+    
+    // List conflicts (Admin)
+    router.get('/conflicts', authenticate, authorize(['FACILITY_ADMIN', 'CAMPUS_ADMIN']), (req, res) => bookingController.listConflicts(req, res));
+
     return router;
 };
 

@@ -25,7 +25,7 @@ class PrismaBookingRepository {
     // Lấy danh sách các ứng viên tiềm năng (Cùng Campus, Cùng Loại, Đủ chỗ, Active)
     const candidates = await this.prisma.facility.findMany({
       where: {
-        campusId,
+        campusId: Number(campusId),
         typeId,
         capacity: { gte: minCapacity },
         status: 'ACTIVE' // Quan trọng: Phòng thay thế phải đang hoạt động
@@ -269,12 +269,106 @@ class PrismaBookingRepository {
   }
 
   // bảo vệ checkin
+  async findPendingByCampus(campusId) {
+    return this.prisma.booking.findMany({
+      where: {
+        status: 'PENDING',
+        facility: {
+          campusId: Number(campusId)
+        }
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            email: true,
+            fullName: true,
+            role: true
+          }
+        },
+        facility: {
+          include: {
+            type: true,
+            campus: true
+          }
+        },
+        bookingType: true
+      },
+      orderBy: {
+        createdAt: 'asc' // Đơn cũ nhất trước
+      }
+    });
+  }
+
+  async findConflictsByCampus(campusId) {
+    // Lấy tất cả bookings APPROVED và PENDING của campus
+    const bookings = await this.prisma.booking.findMany({
+      where: {
+        status: { in: ['APPROVED', 'PENDING'] },
+        facility: {
+          campusId: Number(campusId)
+        }
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            email: true,
+            fullName: true,
+            role: true
+          }
+        },
+        facility: {
+          include: {
+            type: true,
+            campus: true
+          }
+        },
+        bookingType: true
+      },
+      orderBy: {
+        startTime: 'asc'
+      }
+    });
+
+    // Tìm các conflicts (bookings trùng lịch)
+    const conflicts = [];
+    for (let i = 0; i < bookings.length; i++) {
+      for (let j = i + 1; j < bookings.length; j++) {
+        const booking1 = bookings[i];
+        const booking2 = bookings[j];
+        
+        // Kiểm tra xem có trùng lịch không (cùng facility và overlap time)
+        if (booking1.facilityId === booking2.facilityId) {
+          const start1 = new Date(booking1.startTime);
+          const end1 = new Date(booking1.endTime);
+          const start2 = new Date(booking2.startTime);
+          const end2 = new Date(booking2.endTime);
+          
+          // Overlap: start1 < end2 && end1 > start2
+          if (start1 < end2 && end1 > start2) {
+            conflicts.push({
+              booking1,
+              booking2,
+              facility: booking1.facility,
+              conflictType: booking1.status === 'APPROVED' && booking2.status === 'APPROVED' 
+                ? 'APPROVED_CONFLICT' 
+                : 'PENDING_CONFLICT'
+            });
+          }
+        }
+      }
+    }
+
+    return conflicts;
+  }
+
   async searchForGuard(campusId, keyword) {
     const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0);
     const endOfDay = new Date(); endOfDay.setHours(23, 59, 59, 999);
 
     const where = {
-        user: { campusId: campusId },
+        user: { campusId: Number(campusId) },
         status: 'APPROVED',
         startTime: { gte: startOfDay, lte: endOfDay }
     };

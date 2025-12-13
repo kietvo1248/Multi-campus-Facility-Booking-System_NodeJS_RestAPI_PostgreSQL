@@ -25,7 +25,7 @@ class PassportService {
                         
                         // Ở đây app lỏd sẽ lấy campusId mà nó đã gửi đi lúc gọi authenticate
                         const stateJson = req.query.state ? JSON.parse(Buffer.from(req.query.state, 'base64').toString()) : {};
-                        const campusId = stateJson.campusId;
+                        const campusId = stateJson.campusId ? Number(stateJson.campusId) : null;
 
                         const result = await this.loginGoogleUseCase.execute({ 
                             googleProfile: profile, 
