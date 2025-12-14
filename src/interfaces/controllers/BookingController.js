@@ -1,5 +1,7 @@
 class BookingController {
-    constructor({ findAvailableFacilities, createShortTermBooking, getClubBookingSuggestions,approveBooking, rejectBooking, searchBookingForCheckIn, checkInBooking, checkOutBooking, bookingRepository }) {
+    constructor({ findAvailableFacilities, createShortTermBooking, getClubBookingSuggestions,approveBooking, rejectBooking,
+         searchBookingForCheckIn, checkInBooking, checkOutBooking, bookingRepository, getMyBookings, getBookingDetail, cancelBookingByUser,
+        scanRecurringAvailability, createRecurringBooking }) {
         this.findAvailableFacilities = findAvailableFacilities;
         this.createShortTermBooking = createShortTermBooking;
         this.getClubBookingSuggestions = getClubBookingSuggestions;
@@ -9,6 +11,11 @@ class BookingController {
         this.checkInBooking = checkInBooking;
         this.checkOutBooking = checkOutBooking;
         this.bookingRepository = bookingRepository;
+        this.getMyBookings = getMyBookings;
+        this.getBookingDetail = getBookingDetail;
+        this.cancelBookingByUser = cancelBookingByUser;
+        this.scanRecurringAvailability = scanRecurringAvailability;
+        this.createRecurringBooking = createRecurringBooking;
     }
 
     // GET /bookings/search
@@ -173,6 +180,87 @@ class BookingController {
             return res.status(400).json({ message: error.message });
         }
     }
+   // Lấy danh sách của tôi
+    async getMine(req, res) {
+        try {
+            const userId = req.user.id;
+            const result = await this.getMyBookings.execute(userId);
+            return res.status(200).json(result);
+        } catch (error) {
+            return res.status(400).json({ message: error.message });
+        }
+    }
+
+    //  Xem chi tiết
+    async getDetail(req, res) {
+        try {
+            const bookingId = Number(req.params.id);
+            const userId = req.user.id;
+            const result = await this.getBookingDetail.execute(bookingId, userId);
+            return res.status(200).json(result);
+        } catch (error) {
+            return res.status(403).json({ message: error.message });
+        }
+    }
+
+    // Hủy đơn (MW7)
+    async cancel(req, res) {
+        try {
+            const bookingId = Number(req.params.id);
+            const userId = req.user.id;
+            
+            const result = await this.cancelBookingByUser.execute(bookingId, userId);
+            return res.status(200).json({ message: "Hủy đặt phòng thành công.", data: result });
+        } catch (error) {
+            return res.status(400).json({ message: error.message });
+        }
+    }
+
+    //  MW2: Scan tính khả dụng
+    async scanRecurring(req, res) {
+        try {
+            const { originalFacilityId, startDate, weeks, slot, capacity, typeId } = req.body;
+            const campusId = req.user.campusId;
+
+            // Validate
+            if (!originalFacilityId || !startDate || !weeks || !slot) {
+                return res.status(400).json({ message: "Thiếu thông tin bắt buộc (facilityId, startDate, weeks, slot)." });
+            }
+
+            const result = await this.scanRecurringAvailability.execute({
+                originalFacilityId: Number(originalFacilityId),
+                startDate,
+                weeks: Number(weeks),
+                slot: Number(slot), // hoặc mảng nếu FE gửi mảng
+                capacity: Number(capacity),
+                typeId: Number(typeId),
+                campusId: Number(campusId)
+            });
+
+            return res.status(200).json(result);
+        } catch (error) {
+            return res.status(400).json({ message: error.message });
+        }
+    }
+
+    // MW2: Tạo Booking Recurring
+    async createRecurring(req, res) {
+        try {
+            const userId = req.user.id;
+            const { note, bookings } = req.body;
+
+            const result = await this.createRecurringBooking.execute({
+                userId,
+                note,
+                bookings
+            });
+
+            return res.status(201).json({ message: "Tạo lịch định kỳ thành công.", data: result });
+        } catch (error) {
+            return res.status(400).json({ message: error.message });
+        }
+    }
+    
 }
 
 module.exports = BookingController;

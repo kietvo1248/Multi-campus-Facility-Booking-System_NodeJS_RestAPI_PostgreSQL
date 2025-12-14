@@ -6,12 +6,14 @@ info:
     
     ### Hướng dẫn sử dụng theo Role
     * **1. Public & Common**: Dành cho tất cả User (Login, Profile, Đổi pass).
-    * **2. Student & Lecturer**: Tìm phòng, Xem chi tiết phòng, Đặt phòng (Học/Họp).
+    * **2. Student & Lecturer**: Tìm phòng, Xem chi tiết phòng, Đặt phòng (Học/Họp), Quản lý lịch cá nhân.
     * **3. Club Leader**: Các tính năng mở rộng cho chủ nhiệm CLB (Gợi ý phòng ưu tiên).
-    * **4. Admin Operations**: Dành cho Admin (Duyệt đơn, Bảo trì, Quản lý tài nguyên).
+    * **4. Admin Operations**: Dành cho Admin (Duyệt đơn, Xem xung đột, Bảo trì, Quản lý tài nguyên).
     * **5. Security Guard**: Dành cho Bảo vệ (Check-in/Out).
-  version: 3.1.0
+  version: 3.2.0
 servers:
+  - url: https://multi-campus-facility-booking-system-vh0n.onrender.com/api
+    description: Production Server (Render)
   - url: http://localhost:6969/api
     description: Local Development Server
 
@@ -60,8 +62,6 @@ components:
       properties:
         message: { type: string, example: "Lỗi hệ thống hoặc dữ liệu không hợp lệ." }
 
-    # 2. User Update
-    
     UpdateProfileInput:
       type: object
       properties:
@@ -149,10 +149,7 @@ paths:
   # ==========================================
   /auth/login:
     post:
-      summary: Đăng nhập thường (bắt buộc chọn campus)
-      tags: [Authentication]
-      security: []
-      summary: Đăng nhập Email/Pass
+      summary: Đăng nhập thường (Email/Pass)
       tags: [1. Public & Common]
       requestBody:
         required: true
@@ -165,21 +162,8 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/LoginResponse' }
-        '400':
-          description: Thiếu email/password/campusId hoặc campusId không hợp lệ
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/ErrorResponse' }
-        '401':
-          description: Sai email hoặc mật khẩu
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/ErrorResponse' }
-        '403':
-          description: Không thuộc campus đã chọn / tài khoản bị vô hiệu hóa / tài khoản Google-only
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '400': { description: Lỗi dữ liệu }
+        '401': { description: Sai thông tin }
 
   /auth/google/login:
     get:
@@ -223,12 +207,7 @@ paths:
           application/json:
             schema: { $ref: '#/components/schemas/ChangePasswordInput' }
       responses:
-        '200':
-          description: Thành công
-          content:
-            application/json:
-              example: { "message": "Đổi mật khẩu thành công." }
-        '400': { description: Lỗi validate }
+        '200': { description: Thành công }
 
   # ==========================================
   # TAG 2: STUDENT & LECTURER (Standard User)
@@ -269,6 +248,45 @@ paths:
             schema: { $ref: '#/components/schemas/BookingInput' }
       responses:
         '201': { description: Created }
+
+  # [MỚI] API xem danh sách booking của bản thân
+  /bookings/me:
+    get:
+      summary: Xem lịch sử đặt phòng của tôi
+      tags: [2. Student & Lecturer]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: OK }
+
+  # [MỚI] API xem chi tiết booking
+  /bookings/{id}:
+    get:
+      summary: Xem chi tiết đơn đặt phòng
+      tags: [2. Student & Lecturer]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: OK }
+
+  # [MỚI] API hủy booking
+  /bookings/{id}/cancel:
+    patch:
+      summary: Tự hủy đặt phòng (MW7)
+      description: Chỉ hủy được trước giờ bắt đầu 30 phút.
+      tags: [2. Student & Lecturer]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: Cancelled }
+        '400': { description: Quá hạn hủy }
 
   /resources/facilities:
     get:
@@ -354,6 +372,35 @@ paths:
   # TAG 4: ADMIN OPERATIONS (Facility/Campus Admin)
   # ==========================================
   # --- Booking Management ---
+  
+  # [MỚI] Admin xem danh sách chờ duyệt
+  /bookings/pending-approvals:
+    get:
+      summary: Xem danh sách đơn đang chờ (PENDING)
+      tags: [4. Admin Operations]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: query
+          name: campusId
+          description: Optional. Nếu không truyền sẽ lấy theo campus của Admin đăng nhập.
+          schema: { type: integer }
+      responses:
+        '200': { description: OK }
+
+  # [MỚI] Admin xem danh sách xung đột
+  /bookings/conflicts:
+    get:
+      summary: Xem các đơn bị xung đột lịch (Conflicts)
+      tags: [4. Admin Operations]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: query
+          name: campusId
+          description: Optional.
+          schema: { type: integer }
+      responses:
+        '200': { description: OK }
+
   /bookings/{id}/approve:
     patch:
       summary: Duyệt đơn & Auto Hủy đơn trùng (MW4)
@@ -631,5 +678,4 @@ paths:
           required: true
           schema: { type: integer }
       responses:
-        '200':
-          description: OK
+        '200': { description: OK }

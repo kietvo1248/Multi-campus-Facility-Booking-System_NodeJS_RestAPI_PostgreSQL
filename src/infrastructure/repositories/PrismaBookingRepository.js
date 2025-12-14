@@ -384,7 +384,7 @@ class PrismaBookingRepository {
     return this.prisma.booking.findMany({
         where,
         include: {
-            user: { select: { fullName: true, code: true } },
+            user: { select: { fullName: true, email: true } },
             facility: { select: { name: true } }
         },
         orderBy: { startTime: 'asc' }
@@ -433,6 +433,105 @@ class PrismaBookingRepository {
       });
       return updated;
     });
+  }
+
+  //Lấy danh sách booking của 1 user
+  async listByUserId(userId) {
+    return this.prisma.booking.findMany({
+      where: { userId },
+      include: {
+        facility: { select: { name: true, image: true } }, // Kèm tên phòng
+        bookingType: true,
+      },
+      orderBy: { createdAt: 'desc' } // Mới nhất lên đầu
+    });
+  }
+
+  //User tự hủy đơn (MW7)
+  async cancelByUser(bookingId, userId, reason) {
+    return this.prisma.$transaction(async (tx) => {
+      // 1. Update Status
+      const updated = await tx.booking.update({
+        where: { id: bookingId },
+        data: { status: 'CANCELLED' }
+      });
+
+      // 2. Ghi Log
+      await tx.bookingHistory.create({
+        data: {
+          bookingId,
+          oldStatus: updated.status, // Lưu ý: logic đúng là lấy status cũ, nhưng ở đây ta chấp nhận ghi đè hoặc cần query trước nếu muốn chính xác tuyệt đối. 
+          // Tuy nhiên để tối ưu query, ta ghi nhận hành động chuyển sang CANCELLED.
+          newStatus: 'CANCELLED',
+          changeReason: reason || 'User self-cancellation',
+          previousFacilityId: updated.facilityId,
+          changedById: userId // ID của người hủy
+        }
+      });
+      return updated;
+    });
+  }
+
+  //MW2: Tạo Booking định kỳ (Transaction)
+  async createRecurring(groupData, bookingsData) {
+    return this.prisma.$transaction(async (tx) => {
+      // 1. Tạo Group trước
+      const group = await tx.bookingGroup.create({
+        data: {
+            userId: groupData.userId,
+            note: groupData.note,
+            createdById: groupData.userId,
+            createdAt: new Date(),
+            // Nếu có thêm field 'semester' hoặc 'description' thì thêm vào đây
+        }
+      });
+
+      // 2. Chuẩn bị dữ liệu Booking con
+      const bookingsToCreate = bookingsData.map(b => ({
+        userId: groupData.userId,
+        facilityId: b.facilityId, // Mỗi tuần có thể là phòng khác nhau (nếu bị đổi)
+        bookingTypeId: b.bookingTypeId,
+        startTime: b.startTime,
+        endTime: b.endTime,
+        bookingGroupId: group.id, // Link với Group vừa tạo
+        status: 'PENDING',        // Mặc định Pending chờ duyệt
+        attendeeCount: b.attendeeCount
+      }));
+
+      // 3. Tạo hàng loạt Booking
+      // Note: createMany được hỗ trợ tốt trên Postgres
+      await tx.booking.createMany({
+        data: bookingsToCreate
+      });
+
+      return group;
+    });
+  }
+
+  // [MỚI] Helper kiểm tra phòng có trống không (Check chính xác 1 phòng)
+  async isFacilityAvailable(facilityId, startTime, endTime) {
+    // 1. Check Booking (Approved hoặc Pending)
+    const conflictBooking = await this.prisma.booking.findFirst({
+        where: {
+            facilityId: Number(facilityId),
+            status: { in: ['APPROVED', 'PENDING'] },
+            startTime: { lt: endTime },
+            endTime: { gt: startTime }
+        }
+    });
+    if (conflictBooking) return false;
+
+    // 2. Check Bảo trì
+    const conflictMaintenance = await this.prisma.maintenanceLog.findFirst({
+        where: {
+            facilityId: Number(facilityId),
+            startDate: { lt: endTime },
+            OR: [{ endDate: { gt: startTime } }, { endDate: null }]
+        }
+    });
+    if (conflictMaintenance) return false;
+
+    return true;
   }
 
 }

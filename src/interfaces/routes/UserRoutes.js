@@ -10,6 +10,19 @@ const createUserRouter = (userController) => {
     // API Đổi mật khẩu
     router.patch('/change-password', authenticate, (req, res) => userController.changePassword(req, res));
 
+    router.get('/', 
+        authenticate, 
+        authorize(['FACILITY_ADMIN']), 
+        (req, res) => userController.listUsers(req, res)
+    );
+
+    // Khóa/Mở khóa tài khoản
+    router.patch('/:id/status', 
+        authenticate, 
+        authorize(['FACILITY_ADMIN']), 
+        (req, res) => userController.toggleStatus(req, res)
+    );
+
     return router;
 };
 
