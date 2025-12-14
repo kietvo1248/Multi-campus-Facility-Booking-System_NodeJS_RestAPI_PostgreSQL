@@ -28,6 +28,25 @@ const createBookingRouter = (bookingController) => {
     router.patch('/:id/check-in', authenticate, authorize(['SECURITY_GUARD']), (req, res) => bookingController.checkIn(req, res));
     router.patch('/:id/check-out', authenticate, authorize(['SECURITY_GUARD']), (req, res) => bookingController.checkOut(req, res));
 
+    // List pending approvals (Admin)
+    router.get('/pending-approvals', authenticate, authorize(['FACILITY_ADMIN', 'CAMPUS_ADMIN']), (req, res) => bookingController.listPendingApprovals(req, res));
+    
+    // List conflicts (Admin)
+    router.get('/conflicts', authenticate, authorize(['FACILITY_ADMIN', 'CAMPUS_ADMIN']), (req, res) => bookingController.listConflicts(req, res));
+
+    // Xem đơn của mình
+    router.get('/me', authenticate, authorize(['STUDENT', 'LECTURER', 'CLUB_LEADER']), (req, res) => bookingController.getMine(req, res));
+
+    // [MỚI] Xem chi tiết 
+    router.get('/:id', authenticate, authorize(['STUDENT', 'LECTURER', 'CLUB_LEADER']), (req, res) => bookingController.getDetail(req, res));
+
+    // [MỚI] Hủy đơn (MW7)
+    router.patch('/:id/cancel', authenticate, authorize(['STUDENT', 'LECTURER', 'CLUB_LEADER']), (req, res) => bookingController.cancel(req, res));
+
+    // [MỚI] Quét lịch trống định kỳ (MW2)
+    router.post('/recurring/scan', authenticate, authorize(['LECTURER']), (req, res) => bookingController.scanRecurring(req, res));
+    router.post('/recurring', authenticate, authorize(['LECTURER']), (req, res) => bookingController.createRecurring(req, res));
+    
     return router;
 };
 
