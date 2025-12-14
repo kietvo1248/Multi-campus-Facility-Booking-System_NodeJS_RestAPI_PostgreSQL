@@ -72,9 +72,9 @@ const facilityService = new FacilityService(facilityRepository);
 const clubService = new ClubService(clubRepository, clubPriorityRepository, userRepository);
 
 // 2.3 Booking Use Cases (Đã chuẩn hóa tên file PascalCase)
-const CreateShortTermBooking = require('./application/bookings/CreateShortTermBooking');
-const FindAvailableFacilities = require('./application/bookings/FindAvailableFacilities');
-const GetClubBookingSuggestions = require('./application/bookings/GetClubBookingSuggestions');
+const CreateShortTermBooking = require('./application/bookings/createShortTermBooking');
+const FindAvailableFacilities = require('./application/bookings/findAvailableFacilities');
+const GetClubBookingSuggestions = require('./application/bookings/getClubBookingSuggestions');
 const ApproveBooking = require('./application/bookings/ApproveBooking');
 const RejectBooking = require('./application/bookings/RejectBooking');
 const SearchBookingForCheckIn = require('./application/bookings/SearchBookingForCheckIn');
