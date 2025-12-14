@@ -39,12 +39,16 @@ const ViewUserProfile = require('./application/auth/viewUserProfile');
 const LoginGoogleUser = require('./application/auth/LoginGoogleUser');
 const UpdateUserProfile = require('./application/auth/updateProfile');
 const UpdateUserPassword = require('./application/auth/changePassword');
+const ListUsers = require('./application/users/ListUsers');
+const ToggleUserStatus = require('./application/users/ToggleUserStatus');
 
 const loginUserUseCase = new LoginUser(userRepository);
 const viewUserProfileUseCase = new ViewUserProfile(userRepository);
 const loginGoogleUserUseCase = new LoginGoogleUser(userRepository);
 const updateProfileUseCase = new UpdateUserProfile(userRepository);
 const updatePasswordUseCase = new UpdateUserPassword(userRepository);
+const listUsersUseCase = new ListUsers(userRepository);
+const toggleUserStatusUseCase = new ToggleUserStatus(userRepository);
 
 // Setup Passport
 const PassportService = require('./infrastructure/services/PassportService');
@@ -107,7 +111,7 @@ const createRecurringBooking = new CreateRecurringBooking(bookingRepository);
 
 // --- 3. Khởi tạo Interfaces (Controllers) ---
 const AuthController = require('./interfaces/controllers/AuthController');
-const authController = new AuthController(loginUserUseCase, viewUserProfileUseCase, loginGoogleUserUseCase, updateProfileUseCase, updatePasswordUseCase); // Thêm dependency còn thiếu
+const authController = new AuthController(loginUserUseCase, viewUserProfileUseCase, loginGoogleUserUseCase, updateProfileUseCase, updatePasswordUseCase, listUsersUseCase, toggleUserStatusUseCase); // Thêm dependency còn thiếu
 
 const UserController = require('./interfaces/controllers/UserController');
 const userController = new UserController(updateProfileUseCase, updatePasswordUseCase);
