@@ -18,27 +18,26 @@ class ResourceController {
 
   async listFacilities(req, res) { 
     try { 
-        const filters = req.query;
+        // Clone query object để tránh tham chiếu
+        const filters = { ...req.query };
         
-        // Parse campusId từ query nếu có
-        if (filters.campusId) {
-            filters.campusId = Number(filters.campusId);
-        }
+        // [FIX] Ép kiểu số ngay tại đây
+        if (filters.campusId) filters.campusId = Number(filters.campusId);
+        if (filters.typeId) filters.typeId = Number(filters.typeId);
+        if (filters.capacity) filters.capacity = Number(filters.capacity);
         
-        // LOGIC: Nếu không có campusId trong query, mặc định lọc theo Campus của user
-        // (Áp dụng cho tất cả role để đảm bảo hiển thị đúng phòng)
+        // Logic gán campusId mặc định của User
         if (!filters.campusId && req.user.campusId) {
             filters.campusId = Number(req.user.campusId);
         }
 
-        // LOGIC MỚI: Admin roles (FACILITY_ADMIN, CAMPUS_ADMIN, ADMIN) xem được tất cả phòng
-        // Nếu không có parameter includeInactive hoặc status, và user là Admin, tự động include tất cả
+        // Logic Admin xem hết
         const adminRoles = ['FACILITY_ADMIN', 'CAMPUS_ADMIN', 'ADMIN'];
-        const isAdmin = adminRoles.includes(req.user.role);
-        
-        if (isAdmin && !filters.includeInactive && !filters.status) {
-          // Admin mặc định xem tất cả phòng (kể cả MAINTENANCE, INACTIVE)
-          filters.includeInactive = 'true';
+        if (adminRoles.includes(req.user.role)) {
+             // Nếu user không gửi status hoặc gửi status rỗng -> Admin được xem hết
+             if (!filters.status) {
+                 filters.includeInactive = true;
+             }
         }
 
         const data = await this.facilityService.list(filters); 

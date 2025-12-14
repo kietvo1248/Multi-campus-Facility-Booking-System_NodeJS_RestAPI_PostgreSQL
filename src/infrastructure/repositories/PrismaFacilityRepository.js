@@ -4,43 +4,62 @@ class PrismaFacilityRepository {
     const where = {};
     
     // Filter theo status
-    // Nếu includeInactive=true hoặc status=all, không filter theo status (lấy tất cả)
-    if (filters.includeInactive === 'true' || filters.includeInactive === true || 
-        filters.status === 'all' || filters.status === 'ALL') {
-      // Không thêm filter status, lấy tất cả
-    } else if (filters.status) {
-      // Nếu có status cụ thể, filter theo status đó
-      where.status = String(filters.status).toUpperCase();
-    } else {
-      // Mặc định chỉ lấy ACTIVE
-      where.status = 'ACTIVE';
+    // Nếu includeInactive=true hoặc status='all', ta KHÔNG thêm điều kiện status vào where -> Prisma sẽ lấy tất cả.
+    const shouldIncludeAll = 
+        filters.includeInactive === true || 
+        filters.includeInactive === 'true' || 
+        filters.status === 'all' || 
+        filters.status === 'ALL';
+
+    if (!shouldIncludeAll) {
+        if (filters.status) {
+            // Nếu có status cụ thể (VD: MAINTENANCE), dùng nó
+            where.status = String(filters.status).toUpperCase();
+        } else {
+            // Mặc định chỉ lấy ACTIVE
+            where.status = 'ACTIVE';
+        }
     }
     
-    // Parse campusId nếu có trong filters
+    // 2. [FIX] Xử lý CampusId (Chắc chắn là số)
     if (filters.campusId) {
-      where.campusId = Number(filters.campusId);
+      const cId = Number(filters.campusId);
+      if (!isNaN(cId)) {
+          where.campusId = cId;
+      }
     }
     
-    // Copy các filters khác (typeId, capacity, etc.)
+    // 3. [FIX] Xử lý TypeId
     if (filters.typeId) {
-      where.typeId = Number(filters.typeId);
+      const tId = Number(filters.typeId);
+      if (!isNaN(tId)) {
+          where.typeId = tId;
+      }
     }
+
+    // 4. [FIX] Xử lý Capacity
     if (filters.capacity) {
-      where.capacity = typeof filters.capacity === 'object' ? filters.capacity : { gte: Number(filters.capacity) };
+      const cap = Number(filters.capacity);
+      if (!isNaN(cap)) {
+          where.capacity = { gte: cap };
+      }
     }
     
+    // Log để kiểm tra (Xóa khi deploy)
+    // console.log('Prisma Where Clause:', JSON.stringify(where, null, 2));
+
     return this.prisma.facility.findMany({ 
       where,
       include: {
-        type: true,      // Kèm thông tin loại phòng
-        campus: true,    // Kèm thông tin campus
-        equipment: {     // Kèm danh sách thiết bị
+        type: true,
+        campus: true,
+        equipment: {
           include: { equipmentType: true }
         }
       },
       orderBy: [
-        { status: 'asc' },  // Sắp xếp theo status (ACTIVE trước)
-        { id: 'asc' }       // Sau đó sắp xếp theo ID
+        { status: 'asc' },
+        { id: 'asc' }
       ]
     })
   }

@@ -82,6 +82,9 @@ const CancelBookingByUser = require('./application/bookings/CancelBookingByUser'
 // [MỚI] Thêm 2 Use Case Admin
 const ListPendingBookings = require('./application/bookings/ListPendingBookings');
 const ListBookingConflicts = require('./application/bookings/ListBookingConflicts');
+//
+const ScanRecurringAvailability = require('./application/bookings/ScanRecurringAvailability');
+const CreateRecurringBooking = require('./application/bookings/CreateRecurringBooking');
 
 // Instantiation
 const createShortTermBooking = new CreateShortTermBooking(bookingRepository, facilityRepository, prisma);
@@ -98,6 +101,9 @@ const cancelBookingByUser = new CancelBookingByUser(bookingRepository);
 // [MỚI] Init 2 Use Case Admin
 const listPendingBookings = new ListPendingBookings(bookingRepository);
 const listBookingConflicts = new ListBookingConflicts(bookingRepository);
+//
+const scanRecurringAvailability = new ScanRecurringAvailability(bookingRepository, facilityRepository);
+const createRecurringBooking = new CreateRecurringBooking(bookingRepository);
 
 // --- 3. Khởi tạo Interfaces (Controllers) ---
 const AuthController = require('./interfaces/controllers/AuthController');
@@ -122,13 +128,15 @@ const bookingController = new BookingController({
   searchBookingForCheckIn,
   checkInBooking,
   checkOutBooking,
-  bookingRepository, // Lưu ý: Controller của bạn vẫn đang dùng trực tiếp repo cho listPending, nên cứ để lại
+  bookingRepository, // Lưu ý: Controller vẫn đang dùng trực tiếp repo cho listPending, nên cứ để lại
   getMyBookings,
   getBookingDetail,
   cancelBookingByUser,
   // [MỚI] Inject vào Controller
   listPendingBookings,
-  listBookingConflicts
+  listBookingConflicts,
+  scanRecurringAvailability,
+  createRecurringBooking
 });
 
 // --- 4. Setup Routes ---

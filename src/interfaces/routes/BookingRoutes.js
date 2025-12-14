@@ -42,6 +42,11 @@ const createBookingRouter = (bookingController) => {
 
     // [MỚI] Hủy đơn (MW7)
     router.patch('/:id/cancel', authenticate, authorize(['STUDENT', 'LECTURER', 'CLUB_LEADER']), (req, res) => bookingController.cancel(req, res));
+
+    // [MỚI] Quét lịch trống định kỳ (MW2)
+    router.post('/recurring/scan', authenticate, authorize(['LECTURER']), (req, res) => bookingController.scanRecurring(req, res));
+    router.post('/recurring', authenticate, authorize(['LECTURER']), (req, res) => bookingController.createRecurring(req, res));
+    
     return router;
 };
 

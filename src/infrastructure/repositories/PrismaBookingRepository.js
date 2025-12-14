@@ -472,6 +472,68 @@ class PrismaBookingRepository {
     });
   }
 
+  //MW2: Tạo Booking định kỳ (Transaction)
+  async createRecurring(groupData, bookingsData) {
+    return this.prisma.$transaction(async (tx) => {
+      // 1. Tạo Group trước
+      const group = await tx.bookingGroup.create({
+        data: {
+            userId: groupData.userId,
+            note: groupData.note,
+            createdById: groupData.userId,
+            createdAt: new Date(),
+            // Nếu có thêm field 'semester' hoặc 'description' thì thêm vào đây
+        }
+      });
+
+      // 2. Chuẩn bị dữ liệu Booking con
+      const bookingsToCreate = bookingsData.map(b => ({
+        userId: groupData.userId,
+        facilityId: b.facilityId, // Mỗi tuần có thể là phòng khác nhau (nếu bị đổi)
+        bookingTypeId: b.bookingTypeId,
+        startTime: b.startTime,
+        endTime: b.endTime,
+        bookingGroupId: group.id, // Link với Group vừa tạo
+        status: 'PENDING',        // Mặc định Pending chờ duyệt
+        attendeeCount: b.attendeeCount
+      }));
+
+      // 3. Tạo hàng loạt Booking
+      // Note: createMany được hỗ trợ tốt trên Postgres
+      await tx.booking.createMany({
+        data: bookingsToCreate
+      });
+
+      return group;
+    });
+  }
+
+  // [MỚI] Helper kiểm tra phòng có trống không (Check chính xác 1 phòng)
+  async isFacilityAvailable(facilityId, startTime, endTime) {
+    // 1. Check Booking (Approved hoặc Pending)
+    const conflictBooking = await this.prisma.booking.findFirst({
+        where: {
+            facilityId: Number(facilityId),
+            status: { in: ['APPROVED', 'PENDING'] },
+            startTime: { lt: endTime },
+            endTime: { gt: startTime }
+        }
+    });
+    if (conflictBooking) return false;
+
+    // 2. Check Bảo trì
+    const conflictMaintenance = await this.prisma.maintenanceLog.findFirst({
+        where: {
+            facilityId: Number(facilityId),
+            startDate: { lt: endTime },
+            OR: [{ endDate: { gt: startTime } }, { endDate: null }]
+        }
+    });
+    if (conflictMaintenance) return false;
+
+    return true;
+  }
+
 }
 
 module.exports = PrismaBookingRepository
