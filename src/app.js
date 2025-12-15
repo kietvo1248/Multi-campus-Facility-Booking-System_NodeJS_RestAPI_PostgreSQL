@@ -21,6 +21,8 @@ const PrismaFacilityTypeRepository = require('./infrastructure/repositories/Pris
 const PrismaFacilityRepository = require('./infrastructure/repositories/PrismaFacilityRepository');
 const PrismaClubRepository = require('./infrastructure/repositories/PrismaClubRepository');
 const PrismaClubPriorityRepository = require('./infrastructure/repositories/PrismaClubPriorityRepository');
+const PrismaEquipmentTypeRepository = require('./infrastructure/repositories/PrismaEquipmentTypeRepository');
+const PrismaFacilityEquipmentRepository = require('./infrastructure/repositories/PrismaFacilityEquipmentRepository');
 
 const userRepository = new PrismaUserRepository(prisma);
 const maintenanceRepository = new PrismaMaintenanceRepository(prisma);
@@ -30,6 +32,8 @@ const facilityTypeRepository = new PrismaFacilityTypeRepository(prisma);
 const facilityRepository = new PrismaFacilityRepository(prisma);
 const clubRepository = new PrismaClubRepository(prisma);
 const clubPriorityRepository = new PrismaClubPriorityRepository(prisma);
+const equipmentTypeRepository = new PrismaEquipmentTypeRepository(prisma);
+const facilityEquipmentRepository = new PrismaFacilityEquipmentRepository(prisma);
 
 // --- 2. Khởi tạo Application (Use Cases) ---
 
@@ -64,12 +68,16 @@ const CampusService = require('./application/resources/campusService');
 const FacilityTypeService = require('./application/resources/facilityTypeService');
 const FacilityService = require('./application/resources/facilityService');
 const ClubService = require('./application/resources/clubService');
+const EquipmentTypeService = require('./application/equipment/equipmentTypeService');
+const FacilityEquipmentService = require('./application/equipment/facilityEquipmentService');
 
 const setMaintenanceUseCase = new SetMaintenance(maintenanceRepository, bookingRepository, facilityRepository);
 const campusService = new CampusService(campusRepository);
 const facilityTypeService = new FacilityTypeService(facilityTypeRepository);
 const facilityService = new FacilityService(facilityRepository);
 const clubService = new ClubService(clubRepository, clubPriorityRepository, userRepository);
+const equipmentTypeService = new EquipmentTypeService(equipmentTypeRepository);
+const facilityEquipmentService = new FacilityEquipmentService(facilityEquipmentRepository);
 
 // 2.3 Booking Use Cases (Đã chuẩn hóa tên file PascalCase)
 const CreateShortTermBooking = require('./application/bookings/createShortTermBooking');
@@ -170,6 +178,14 @@ const clubRouter = createClubRouter(resourceController);
 
 const createBookingRouter = require('./interfaces/routes/BookingRoutes');
 const bookingRouter = createBookingRouter(bookingController);
+const EquipmentController = require('./interfaces/controllers/EquipmentController');
+const equipmentController = new EquipmentController({ equipmentTypeService, facilityEquipmentService });
+const createEquipmentRouter = require('./interfaces/routes/EquipmentRoutes');
+const equipmentRouter = createEquipmentRouter(equipmentController);
+const ReportController = require('./interfaces/controllers/ReportController');
+const reportController = new ReportController(prisma);
+const createReportRouter = require('./interfaces/routes/ReportRoutes');
+const reportRouter = createReportRouter(reportController);
 
 // Swagger setup
 try {
@@ -188,6 +204,8 @@ app.use('/api/facility-types', facilityTypeRouter);
 app.use('/api/facilities', facilityRouter);
 app.use('/api/clubs', clubRouter);
 app.use('/api/bookings', bookingRouter);
+app.use('/api/equipment', equipmentRouter);
+app.use('/api/reports', reportRouter);
 app.use('/api/resources', resourceRouter);
 
 // Health check
