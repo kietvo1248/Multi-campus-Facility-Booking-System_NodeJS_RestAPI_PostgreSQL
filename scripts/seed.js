@@ -3,167 +3,327 @@ const bcrypt = require('bcryptjs');
 
 const prisma = new PrismaClient();
 
-async function main() {
-  console.log('🌱 Start seeding database...');
+// --- CONFIGURATION ---
+const CONFIG = {
+  PASS: '123456',
+  COUNTS: {
+    STUDENTS_PER_CAMPUS: 20, // 20 SV mỗi cơ sở
+    LECTURERS_PER_CAMPUS: 5, // 5 GV mỗi cơ sở
+    ROOMS_NORMAL: 30,        // 30 phòng học thường
+    ROOMS_LAB: 10,           // 10 phòng Lab
+    BOOKINGS_PER_USER: 3     // Mỗi user có ít nhất 3 booking
+  }
+};
 
-  // --- 0. Chuẩn bị Password Hash (Dùng chung cho tất cả user để chạy cho nhanh) ---
-  const salt = await bcrypt.genSalt(10);
-  const commonPassword = await bcrypt.hash('123456', salt); // Pass mặc định: 123456
-
-  // --- 1. Tạo Campus ---
-  console.log('Creating Campuses...');
-  const campusHL = await prisma.campus.create({
-    data: { name: 'FPTU Hoa Lac', address: 'Khu CNC Hoa Lac, Ha Noi' }
-  });
-  const campusHCM = await prisma.campus.create({
-    data: { name: 'FPTU Ho Chi Minh', address: 'Khu CNC, Thu Duc, TP.HCM' }
-  });
-
-  // --- 2. Tạo Master Data (Types) ---
-  console.log('Creating Master Data (Types)...');
+// Helper: Tính ngày giờ linh hoạt
+const getDateTime = (offsetDays, hour, duration = 2) => {
+  const date = new Date();
+  date.setDate(date.getDate() + offsetDays);
   
-  // 2.1 Facility Types
-  const ftClassroom = await prisma.facilityType.create({ data: { name: 'Phòng học', description: 'Phòng học lý thuyết tiêu chuẩn' } });
-  const ftLab = await prisma.facilityType.create({ data: { name: 'Phòng Lab', description: 'Phòng thực hành máy tính' } });
-  const ftHall = await prisma.facilityType.create({ data: { name: 'Hội trường', description: 'Sức chứa lớn cho sự kiện' } });
-  const ftSport = await prisma.facilityType.create({ data: { name: 'Sân thể thao', description: 'Sân bóng, sân cầu lông' } });
+  const startTime = new Date(date);
+  startTime.setHours(hour, 0, 0, 0);
+  
+  const endTime = new Date(date);
+  endTime.setHours(hour + duration, 0, 0, 0);
+  
+  return { startTime, endTime };
+};
 
-  // 2.2 Booking Types (Quy định độ ưu tiên)
-  const btEvent = await prisma.bookingType.create({ data: { name: 'Sự kiện lớn', priorityWeight: 100 } });
-  const btClass = await prisma.bookingType.create({ data: { name: 'Lớp học chính quy', priorityWeight: 80 } });
-  const btClub = await prisma.bookingType.create({ data: { name: 'Sinh hoạt CLB', priorityWeight: 50 } });
-  const btSelf = await prisma.bookingType.create({ data: { name: 'Tự học', priorityWeight: 10 } });
+// Helper: Safe Upsert (Tìm trước, nếu không có mới tạo)
+const safeCreate = async (model, uniqueQuery, createData) => {
+  const existing = await model.findFirst({ where: uniqueQuery });
+  if (existing) return existing;
+  return await model.create({ data: createData });
+};
 
-  // 2.3 Equipment Types
-  const etProjector = await prisma.equipmentType.create({ data: { name: 'Máy chiếu', category: 'Visual' } });
-  const etSpeaker = await prisma.equipmentType.create({ data: { name: 'Loa thùng', category: 'Audio' } });
-  const etMic = await prisma.equipmentType.create({ data: { name: 'Micro không dây', category: 'Audio' } });
-  const etWifi = await prisma.equipmentType.create({ data: { name: 'Router Wifi Gaming', category: 'Network' } });
+async function main() {
+  console.log('🚀 Start seeding MASSIVE data...');
+  const salt = await bcrypt.genSalt(10);
+  const hashedPassword = await bcrypt.hash(CONFIG.PASS, salt);
 
-  // --- 3. Helper Function tạo User ---
-  const createUsers = async (campusId, role, count, prefixEmail, startIdx = 1) => {
-    const users = [];
-    for (let i = 0; i < count; i++) {
-      const idx = startIdx + i;
-      const user = await prisma.user.create({
+  // =================================================================
+  // 1. MASTER DATA
+  // =================================================================
+  console.log('🏗️  Creating Master Data (Campus, Types)...');
+
+  // Campus
+  const campusHL = await prisma.campus.upsert({ where: { id: 1 }, update: {}, create: { id: 1, name: 'FPTU Hoa Lac', address: 'Hanoi', isActive: true } });
+  const campusHCM = await prisma.campus.upsert({ where: { id: 2 }, update: {}, create: { id: 2, name: 'FPTU Ho Chi Minh', address: 'HCMC', isActive: true } });
+
+  // Facility Types
+  const ftMap = {};
+  const types = [
+    { name: 'Phòng học', desc: 'Standard Classroom' },
+    { name: 'Phòng Lab', desc: 'Computer Lab High Spec' },
+    { name: 'Hội trường', desc: 'Large Event Hall' },
+    { name: 'Sân thể thao', desc: 'Sport Field' },
+    { name: 'Phòng Tự Học', desc: 'Private Pods' },
+    { name: 'Phòng Họp', desc: 'Conference Room' },
+    { name: 'Studio', desc: 'Media Production' }
+  ];
+  for (const t of types) {
+    const res = await safeCreate(prisma.facilityType, { name: t.name }, { name: t.name, description: t.desc });
+    ftMap[t.name] = res.id;
+  }
+
+  // Booking Types
+  const btMap = {};
+  const bTypes = [
+    { name: 'Sự kiện lớn', w: 100 }, { name: 'Lớp học', w: 80 }, 
+    { name: 'Sinh hoạt CLB', w: 50 }, { name: 'Hội thảo', w: 40 }, 
+    { name: 'Tự học/Học nhóm', w: 10 }
+  ];
+  for (const t of bTypes) {
+    const res = await safeCreate(prisma.bookingType, { name: t.name }, { name: t.name, priorityWeight: t.w });
+    btMap[t.name] = res.id;
+  }
+
+  // Equipment Types
+  const eqMap = {};
+  const eqTypes = [
+    { name: 'Projector 4K', cat: 'Visual' }, { name: 'Speaker System', cat: 'Audio' },
+    { name: 'Wifi 6 Router', cat: 'Network' }, { name: 'Air Conditioner', cat: 'General' },
+    { name: 'Whiteboard', cat: 'General' }
+  ];
+  for (const t of eqTypes) {
+    const res = await safeCreate(prisma.equipmentType, { name: t.name }, { name: t.name, category: t.cat });
+    eqMap[t.name] = res.id;
+  }
+
+  // =================================================================
+  // 2. USERS GENERATION (Massive)
+  // =================================================================
+  console.log('👥 Creating Users (Staff, Lecturers, Students)...');
+
+  // [UPDATED] Thêm field 'admin' vào structure để dùng sau này
+  const users = { HL: { stu: [], lec: [], admin: null }, HCM: { stu: [], lec: [], admin: null } };
+
+  // Helper create User
+  const ensureUser = async (email, name, role, campusId) => {
+    return await prisma.user.upsert({
+      where: { email },
+      update: { fullName: name, campusId, role },
+      create: { email, fullName: name, passwordHash: hashedPassword, role, campusId, isActive: true }
+    });
+  };
+
+  // 2.1 Staffs (Admin & Guard)
+  users.HL.admin = await ensureUser('admin.hl@fpt.edu.vn', 'Admin Hoa Lac', 'FACILITY_ADMIN', campusHL.id);
+  const guardHL = await ensureUser('guard.hl@fpt.edu.vn', 'Mr. Bao Ve HL', 'SECURITY_GUARD', campusHL.id);
+  
+  users.HCM.admin = await ensureUser('admin.hcm@fpt.edu.vn', 'Admin HCM', 'FACILITY_ADMIN', campusHCM.id);
+  const guardHCM = await ensureUser('guard.hcm@fpt.edu.vn', 'Mr. Bao Ve HCM', 'SECURITY_GUARD', campusHCM.id);
+
+  // 2.2 Lecturers (At least 2 per campus)
+  for (let i = 1; i <= CONFIG.COUNTS.LECTURERS_PER_CAMPUS; i++) {
+    users.HL.lec.push(await ensureUser(`lec.hl.${i}@fpt.edu.vn`, `Giảng viên HL ${i}`, 'LECTURER', campusHL.id));
+    users.HCM.lec.push(await ensureUser(`lec.hcm.${i}@fpt.edu.vn`, `Giảng viên HCM ${i}`, 'LECTURER', campusHCM.id));
+  }
+
+  // 2.3 Students (Massive)
+  // Demo accounts
+  users.HL.stu.push(await ensureUser('student.hl@demo.com', 'Demo Student HL', 'STUDENT', campusHL.id));
+  users.HCM.stu.push(await ensureUser('student.hcm@demo.com', 'Demo Student HCM', 'STUDENT', campusHCM.id));
+
+  for (let i = 1; i <= CONFIG.COUNTS.STUDENTS_PER_CAMPUS; i++) {
+    users.HL.stu.push(await ensureUser(`stu.hl.${i}@fpt.edu.vn`, `Sinh viên HL ${i}`, 'STUDENT', campusHL.id));
+    users.HCM.stu.push(await ensureUser(`stu.hcm.${i}@fpt.edu.vn`, `Sinh viên HCM ${i}`, 'STUDENT', campusHCM.id));
+  }
+
+  // =================================================================
+  // 3. FACILITIES GENERATION
+  // =================================================================
+  console.log('🏢 Building Facilities...');
+
+  const facilities = { HL: [], HCM: [] };
+
+  const buildCampusFacilities = async (campusId, prefix, list) => {
+    // Classrooms
+    for (let i = 101; i < 101 + CONFIG.COUNTS.ROOMS_NORMAL; i++) {
+      const room = await safeCreate(prisma.facility, { name: `${prefix}-R${i}`, campusId }, {
+        name: `${prefix}-R${i}`, campusId, typeId: ftMap['Phòng học'], capacity: 30, status: 'ACTIVE',
+        description: 'Phòng học tiêu chuẩn', imageUrls: ["https://via.placeholder.com/300"]
+      });
+      list.push(room);
+    }
+    // Labs
+    for (let i = 1; i <= CONFIG.COUNTS.ROOMS_LAB; i++) {
+      const lab = await safeCreate(prisma.facility, { name: `${prefix}-Lab${i}`, campusId }, {
+        name: `${prefix}-Lab${i}`, campusId, typeId: ftMap['Phòng Lab'], capacity: 40, status: 'ACTIVE',
+        description: 'Phòng Lab cấu hình cao', imageUrls: ["https://via.placeholder.com/300"]
+      });
+      list.push(lab);
+      
+      // Add Equipment (Check exists)
+      const eqExist = await prisma.facilityEquipment.findFirst({ where: { facilityId: lab.id }});
+      if(!eqExist){
+        await prisma.facilityEquipment.createMany({ data: [{ facilityId: lab.id, equipmentTypeId: eqMap['Air Conditioner'], quantity: 2, condition: 'GOOD' }] });
+      }
+    }
+    // Special Rooms
+    const hall = await safeCreate(prisma.facility, { name: `${prefix}-Hall`, campusId }, { name: `${prefix}-Hall`, campusId, typeId: ftMap['Hội trường'], capacity: 500, status: 'ACTIVE' });
+    const studio = await safeCreate(prisma.facility, { name: `${prefix}-Studio`, campusId }, { name: `${prefix}-Studio`, campusId, typeId: ftMap['Studio'], capacity: 10, status: 'ACTIVE' });
+    const meeting = await safeCreate(prisma.facility, { name: `${prefix}-Meeting`, campusId }, { name: `${prefix}-Meeting`, campusId, typeId: ftMap['Phòng Họp'], capacity: 15, status: 'ACTIVE' });
+    list.push(hall, studio, meeting);
+  };
+
+  await buildCampusFacilities(campusHL.id, 'HL', facilities.HL);
+  await buildCampusFacilities(campusHCM.id, 'HCM', facilities.HCM);
+
+  // =================================================================
+  // 4. CLUBS & PRIORITIES
+  // =================================================================
+  console.log('🛡️  Setting up Clubs & Priorities...');
+
+  const createClub = async (code, name, campusId, leader) => {
+    const club = await prisma.club.upsert({
+      where: { code },
+      update: { leaderId: leader.id },
+      create: { code, name, campusId, leaderId: leader.id, description: `CLB ${name}` }
+    });
+    // Update Leader Name
+    const baseName = leader.fullName.split(' [')[0];
+    await prisma.user.update({ where: { id: leader.id }, data: { fullName: `${baseName} [Leader ${code}]` } });
+    return club;
+  };
+
+  // Helper create priority safely
+  const createPriority = async (clubId, facilityId, priorityScore, note) => {
+    const exists = await prisma.clubPriority.findUnique({
+        where: { clubId_facilityId: { clubId, facilityId } }
+    });
+    if (!exists) {
+        await prisma.clubPriority.create({ data: { clubId, facilityId, priorityScore, note } });
+    }
+  };
+
+  // CLB HCM
+  const fCode = await createClub('F-CODE', 'F-Code Academic', campusHCM.id, users.HCM.stu[0]);
+  const melody = await createClub('MELODY', 'Melody Music', campusHCM.id, users.HCM.stu[1]);
+  const basket = await createClub('BASKET', 'Basketball Club', campusHCM.id, users.HCM.stu[2]);
+
+  // Priority HCM
+  await createPriority(fCode.id, facilities.HCM.find(f => f.name.includes('Lab1')).id, 50, 'Training Code');
+  await createPriority(fCode.id, facilities.HCM.find(f => f.name.includes('Meeting')).id, 30, 'Họp Core Team');
+
+  // Priority HL
+  const jsClub = await createClub('JS-CLUB', 'JS Software', campusHL.id, users.HL.stu[0]);
+  await createPriority(jsClub.id, facilities.HL.find(f => f.name.includes('Lab1')).id, 40, 'Training JS');
+
+  // =================================================================
+  // 5. BOOKINGS GENERATION (Random & Logic)
+  // =================================================================
+  console.log('📅 Generating Random Bookings...');
+
+  const generateBookingsForCampus = async (campusUsers, campusFacilities, bookingTypes) => {
+    const admin = campusUsers.admin; // Lấy Admin của cơ sở để gán vào changedBy
+
+    // 5.1 Giảng viên đặt Lớp học (Recurring giả lập)
+    const lecturers = campusUsers.lec;
+    for (const lec of lecturers) {
+      const room = campusFacilities[Math.floor(Math.random() * 10)]; // Random phòng học
+      for (let w = 0; w < 4; w++) { // 4 tuần
+        const { startTime, endTime } = getDateTime(1 + (w * 7), 9, 2); // Slot 2
+        
+        const exist = await prisma.booking.findFirst({ where: { userId: lec.id, facilityId: room.id, startTime } });
+        
+        if (!exist) {
+            await prisma.booking.create({
+              data: {
+                userId: lec.id,
+                facilityId: room.id,
+                bookingTypeId: btMap['Lớp học'],
+                startTime, endTime, status: 'APPROVED', attendeeCount: 30
+              }
+            });
+        }
+      }
+    }
+
+    // 5.2 Sinh viên đặt phòng (Random)
+    const students = campusUsers.stu;
+    const statuses = ['PENDING', 'APPROVED', 'REJECTED', 'CANCELLED', 'COMPLETED'];
+    
+    for (const stu of students) {
+      const count = Math.floor(Math.random() * 3) + 3;
+      for (let k = 0; k < count; k++) {
+        const offset = Math.floor(Math.random() * 15) - 5; 
+        const hour = 7 + Math.floor(Math.random() * 5) * 2;
+        const { startTime, endTime } = getDateTime(offset, hour, 2);
+        
+        const room = campusFacilities[Math.floor(Math.random() * campusFacilities.length)];
+        let status = statuses[Math.floor(Math.random() * statuses.length)];
+
+        if (offset < 0) {
+          status = ['COMPLETED', 'CANCELLED', 'REJECTED'][Math.floor(Math.random() * 3)];
+        }
+
+        const exist = await prisma.booking.findFirst({ where: { userId: stu.id, startTime } });
+
+        if (!exist) {
+            const booking = await prisma.booking.create({
+              data: {
+                userId: stu.id,
+                facilityId: room.id,
+                bookingTypeId: btMap['Tự học/Học nhóm'],
+                startTime, endTime, status,
+                isCheckedIn: status === 'COMPLETED',
+                attendeeCount: 5
+              }
+            });
+
+            // [FIXED] Tạo History giả với cú pháp connect và changedBy
+            if (status !== 'PENDING') {
+              await prisma.bookingHistory.create({
+                data: { 
+                    booking: { connect: { id: booking.id } },
+                    oldStatus: 'PENDING', 
+                    newStatus: status, 
+                    changeReason: 'System Seed', 
+                    // Liên kết người thay đổi là Admin của cơ sở đó
+                    changedBy: { connect: { id: admin.id } } 
+                }
+              });
+            }
+        }
+      }
+    }
+  };
+
+  await generateBookingsForCampus(users.HL, facilities.HL, btMap);
+  await generateBookingsForCampus(users.HCM, facilities.HCM, btMap);
+
+  // =================================================================
+  // 6. MAINTENANCE
+  // =================================================================
+  console.log('🔧 Scheduling Maintenance...');
+  
+  const studioHCM = facilities.HCM.find(f => f.name.includes('Studio'));
+  const maintTime = getDateTime(7, 0, 24); // Cả ngày
+  
+  const existMaint = await prisma.maintenanceLog.findFirst({ where: { facilityId: studioHCM.id, startDate: maintTime.startTime } });
+  
+  if (!existMaint) {
+      await prisma.maintenanceLog.create({
         data: {
-          email: `${prefixEmail}${idx}@fpt.edu.vn`,
-          fullName: `${role} ${idx} - ${campusId === campusHL.id ? 'HL' : 'HCM'}`,
-          passwordHash: commonPassword,
-          role: role,
-          campusId: campusId,
-          isActive: true
+          facility: { connect: { id: studioHCM.id } },
+          startDate: maintTime.startTime,
+          endDate: maintTime.endTime,
+          reason: 'Nâng cấp thiết bị cách âm',
+          status: 'SCHEDULED',
+          reportedBy: { connect: { id: users.HCM.admin.id } } // [Fixed] Dùng connect ID cho chắc chắn
         }
       });
-      users.push(user);
-    }
-    return users;
-  };
+  }
 
-  // --- 4. Tạo Users cho từng Campus ---
-  console.log('Creating Users per Campus...');
-
-  // 4.1 Users Hòa Lạc
-  await createUsers(campusHL.id, 'STAFF', 2, 'staff_hl');    // 2 Quản lý
-  await createUsers(campusHL.id, 'SECURITY', 2, 'sec_hl');   // 2 Bảo vệ
-  await createUsers(campusHL.id, 'LECTURER', 3, 'lec_hl');   // 3 Giảng viên
-  const studentsHL = await createUsers(campusHL.id, 'STUDENT', 6, 'stu_hl'); // 6 Sinh viên
-
-  // 4.2 Users HCM
-  await createUsers(campusHCM.id, 'STAFF', 2, 'staff_hcm');
-  await createUsers(campusHCM.id, 'SECURITY', 2, 'sec_hcm');
-  await createUsers(campusHCM.id, 'LECTURER', 3, 'lec_hcm');
-  const studentsHCM = await createUsers(campusHCM.id, 'STUDENT', 6, 'stu_hcm');
-
-  // --- 5. Tạo Clubs & Update Leader Role ---
-  console.log('Creating Clubs...');
-
-  // Helper tạo Club
-  const createClub = async (name, campusId, studentLeader) => {
-    // 1. Update role sinh viên thành CLUB_LEADER
-    await prisma.user.update({
-      where: { id: studentLeader.id },
-      data: { role: 'CLUB_LEADER' }
-    });
-    // 2. Tạo Club
-    return await prisma.club.create({
-      data: {
-        name: name,
-        description: `Câu lạc bộ ${name} tại campus`,
-        campusId: campusId,
-        leaderId: studentLeader.id
-      }
-    });
-  };
-
-  // CLB Hòa Lạc (Lấy 2 sv đầu tiên làm leader)
-  const clubCodeHL = await createClub('JS Club HL', campusHL.id, studentsHL[0]);
-  const clubMusicHL = await createClub('Melody Club HL', campusHL.id, studentsHL[1]);
-
-  // CLB HCM (Lấy 2 sv đầu tiên làm leader)
-  const clubBasketHCM = await createClub('Basketball HCM', campusHCM.id, studentsHCM[0]);
-  const clubEventHCM = await createClub('Event Org HCM', campusHCM.id, studentsHCM[1]);
-
-  // --- 6. Tạo Facilities (Phòng ốc) ---
-  console.log('Creating Facilities...');
-
-  const createFacility = async (name, campusId, typeId, capacity) => {
-    return await prisma.facility.create({
-      data: {
-        name,
-        campusId,
-        typeId,
-        capacity,
-        status: 'AVAILABLE',
-        description: `Phòng ${name} đầy đủ tiện nghi`,
-        imageUrls: ["https://via.placeholder.com/300"]
-      }
-    });
-  };
-
-  // Facilities Hòa Lạc
-  const hlRoom101 = await createFacility('Alpha 101', campusHL.id, ftClassroom.id, 40);
-  const hlLabA = await createFacility('Lab IoT', campusHL.id, ftLab.id, 30);
-  const hlHall = await createFacility('Grand Hall HL', campusHL.id, ftHall.id, 200);
-  const hlField = await createFacility('Sân bóng HL', campusHL.id, ftSport.id, 50);
-
-  // Facilities HCM
-  const hcmRoom202 = await createFacility('Beta 202', campusHCM.id, ftClassroom.id, 35);
-  const hcmLabB = await createFacility('Lab AI', campusHCM.id, ftLab.id, 25);
-  const hcmHall = await createFacility('Grand Hall HCM', campusHCM.id, ftHall.id, 300);
-  const hcmField = await createFacility('Sân bóng rổ', campusHCM.id, ftSport.id, 20);
-
-  // --- 7. Setup Data Phụ (Equipment & Priority) ---
-  console.log('Setting up Equipments & Priorities...');
-
-  // 7.1 Thêm thiết bị vào phòng (Ví dụ Lab AI HCM)
-  await prisma.facilityEquipment.createMany({
-    data: [
-      { facilityId: hcmLabB.id, equipmentTypeId: etProjector.id, condition: 'GOOD', quantity: 1 },
-      { facilityId: hcmLabB.id, equipmentTypeId: etWifi.id, condition: 'GOOD', quantity: 2 },
-    ]
-  });
-
-  // 7.2 Thêm Club Priority (Quyền ưu tiên)
-  // CLB Bóng rổ được ưu tiên ở Sân bóng rổ (Điểm cộng: 50)
-  await prisma.clubPriority.create({
-    data: {
-      clubId: clubBasketHCM.id,
-      facilityId: hcmField.id,
-      priorityScore: 50
-    }
-  });
-
-  // CLB Nhạc HL được ưu tiên ở Hội trường HL
-  await prisma.clubPriority.create({
-    data: {
-      clubId: clubMusicHL.id,
-      facilityId: hlHall.id,
-      priorityScore: 30
-    }
-  });
-
-  console.log('✅ Seeding completed successfully!');
+  console.log('✅ SEEDING COMPLETED SUCCESSFULLY!');
+  console.log('-------------------------------------------------------');
+  console.log('🔑 CREDENTIALS (Pass: 123456):');
+  console.log(`   [HCM] Admin:    admin.hcm@fpt.edu.vn`);
+  console.log(`   [HCM] Lecturer: lec.hcm.1@fpt.edu.vn`);
+  console.log(`   [HCM] Leader:   ${users.HCM.stu[0].email} (F-Code)`);
+  console.log(`   [HCM] Student:  student.hcm@demo.com`);
+  console.log('-------------------------------------------------------');
 }
 
 main()

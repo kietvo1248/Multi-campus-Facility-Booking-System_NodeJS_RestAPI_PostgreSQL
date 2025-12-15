@@ -1,6 +1,7 @@
 class ViewUserProfile {
-    constructor(userRepository) {
+    constructor(userRepository, clubRepository) { // Inject thêm clubRepository
         this.userRepository = userRepository;
+        this.clubRepository = clubRepository;
     }
 
     async execute(userId) {
@@ -10,17 +11,31 @@ class ViewUserProfile {
             throw new Error('Người dùng không tồn tại.');
         }
 
-        // Trả về thông tin (User Entity đã clean dữ liệu nhạy cảm)
-        // có thể format thêm dữ liệu ở đây nếu cần
-        return {
+        const response = {
             id: user.id,
             fullName: user.fullName,
             email: user.email,
             role: user.role,
-            campus: user.campusName, // Lấy tên campus từ entity
+            phoneNumber: user.phoneNumber,
+            campus: user.campusName,
             campusId: user.campusId,
             isActive: user.isActive
         };
+
+        // [MỚI] Nếu là Sinh viên, kiểm tra xem có cầm CLB nào không
+        if (user.role === 'STUDENT' && this.clubRepository) {
+            const club = await this.clubRepository.findByLeaderId(userId);
+            if (club) {
+                // Gắn thêm thông tin CLB quản lý vào profile
+                response.managedClub = {
+                    id: club.id,
+                    code: club.code,
+                    name: club.name
+                };
+            }
+        }
+
+        return response;
     }
 }
 

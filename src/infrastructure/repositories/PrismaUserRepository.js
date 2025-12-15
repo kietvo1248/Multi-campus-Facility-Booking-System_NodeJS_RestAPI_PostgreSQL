@@ -40,7 +40,7 @@ class PrismaUserRepository extends IUserRepository {
                 fullName: userData.fullName,
                 googleId: userData.googleId,
                 role: userData.role,
-                campusId: userData.campusId,
+                campusId: Number(userData.campusId),
                 passwordHash: null, // không có register nên Không có mật khẩu
                 isActive: true
             },
@@ -48,6 +48,82 @@ class PrismaUserRepository extends IUserRepository {
         });
         return new User(newUser);
     }
+
+    async updateProfile(userId, { fullName, phoneNumber }) {
+        const updateData = {};
+        if (fullName) updateData.fullName = fullName;
+        if (phoneNumber) updateData.phoneNumber = phoneNumber;
+
+        const updatedUser = await this.prisma.user.update({
+            where: { id: userId },
+            data: updateData,
+            include: { campus: true }
+        });
+
+        return new User(updatedUser);
+    }
+
+    async updatePassword(userId, passwordHash) {
+        await this.prisma.user.update({
+            where: { id: userId },
+            data: { passwordHash }
+        });
+        return true;
+     }
+
+     // Hàm tìm kiếm danh sách User cho Admin
+    async findAll({ campusId, role, keyword, page = 1, limit = 10 }) {
+        const skip = (page - 1) * limit;
+        const where = {
+            // Admin chỉ xem được user thuộc campus mình (trừ khi là Super Admin - logic mở rộng sau)
+            campusId: campusId ? Number(campusId) : undefined,
+        };
+
+        // Lọc theo Role (STUDENT, LECTURER, FACILITY_ADMIN...)
+        if (role && role !== 'ALL') {
+            where.role = role;
+        }
+
+        // Tìm kiếm theo tên hoặc email
+        if (keyword) {
+            where.OR = [
+                { fullName: { contains: keyword, mode: 'insensitive' } },
+                { email: { contains: keyword, mode: 'insensitive' } }
+            ];
+        }
+
+        // Lấy tổng số để phân trang (pagination)
+        const total = await this.prisma.user.count({ where });
+
+        const users = await this.prisma.user.findMany({
+            where,
+            include: { campus: true },
+            skip,
+            take: Number(limit),
+            orderBy: { createdAt: 'desc' }
+        });
+
+        return {
+            data: users.map(u => new User(u)),
+            pagination: {
+                total,
+                page: Number(page),
+                limit: Number(limit),
+                totalPages: Math.ceil(total / limit)
+            }
+        };
+    }
+
+    // [MỚI] Hàm cập nhật trạng thái (Khóa/Mở khóa)
+    async updateStatus(userId, isActive) {
+        const updatedUser = await this.prisma.user.update({
+            where: { id: Number(userId) },
+            data: { isActive: Boolean(isActive) },
+            include: { campus: true }
+        });
+        return new User(updatedUser);
+    }
+
     
 }
 

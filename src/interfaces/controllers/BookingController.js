@@ -1,0 +1,266 @@
+class BookingController {
+    constructor({ findAvailableFacilities, createShortTermBooking, getClubBookingSuggestions,approveBooking, rejectBooking,
+         searchBookingForCheckIn, checkInBooking, checkOutBooking, bookingRepository, getMyBookings, getBookingDetail, cancelBookingByUser,
+        scanRecurringAvailability, createRecurringBooking }) {
+        this.findAvailableFacilities = findAvailableFacilities;
+        this.createShortTermBooking = createShortTermBooking;
+        this.getClubBookingSuggestions = getClubBookingSuggestions;
+        this.approveBooking = approveBooking;
+        this.rejectBooking = rejectBooking;
+        this.searchBookingForCheckIn = searchBookingForCheckIn;
+        this.checkInBooking = checkInBooking;
+        this.checkOutBooking = checkOutBooking;
+        this.bookingRepository = bookingRepository;
+        this.getMyBookings = getMyBookings;
+        this.getBookingDetail = getBookingDetail;
+        this.cancelBookingByUser = cancelBookingByUser;
+        this.scanRecurringAvailability = scanRecurringAvailability;
+        this.createRecurringBooking = createRecurringBooking;
+    }
+
+    // GET /bookings/search
+    async search(req, res) {
+        try {
+            const { date, slot, typeId, capacity } = req.query;
+            const campusId = Number(req.user.campusId);
+
+            const result = await this.findAvailableFacilities.execute({
+                campusId, date, slot: Number(slot), typeId, capacity
+            });
+            return res.status(200).json(result);
+        } catch (error) {
+            return res.status(400).json({ message: error.message });
+        }
+    }
+
+    // POST /bookings
+    async create(req, res) {
+        try {
+            const userId = req.user.id;
+            const userCampusId = Number(req.user.campusId);
+            
+            // Lấy 'slots' (số nhiều) từ body
+            const { facilityId, date, slots, bookingTypeId, purpose, attendeeCount } = req.body;
+
+            // Validate sơ bộ
+            if (!slots || !Array.isArray(slots) || slots.length === 0) {
+                return res.status(400).json({ message: "Vui lòng chọn ít nhất 1 slot." });
+            }
+
+            const result = await this.createShortTermBooking.execute({
+                userId, 
+                userCampusId,
+                facilityId: Number(facilityId),
+                date,
+                slots: slots, // Truyền mảng slots
+                bookingTypeId: Number(bookingTypeId),
+                purpose,
+                attendeeCount: Number(attendeeCount)
+            });
+            return res.status(201).json(result);
+        } catch (error) {
+            return res.status(400).json({ message: error.message });
+        }
+    }
+
+    async suggestForClub(req, res) {
+        try {
+            const { date, slot } = req.query;
+            const userId = req.user.id;
+            const userCampusId = Number(req.user.campusId);
+
+            // Gọi Use Case
+            const result = await this.getClubBookingSuggestions.execute({
+                userId,
+                userCampusId,
+                date,
+                slot: Number(slot)
+            });
+            return res.status(200).json(result);
+        } catch (error) {
+            // Nếu lỗi là do không phải leader -> 403, còn lại 4 xị
+            const status = error.message.includes('không phải là Chủ nhiệm') ? 403 : 400;
+            return res.status(status).json({ message: error.message });
+        }
+    }
+
+    async listPendingApprovals(req, res) {
+        try {
+            const campusId = req.query.campusId ? Number(req.query.campusId) : Number(req.user.campusId);
+            
+            if (!campusId || isNaN(campusId)) {
+                return res.status(400).json({ message: 'Campus ID là bắt buộc' });
+            }
+
+            const bookings = await this.bookingRepository.findPendingByCampus(campusId);
+            return res.status(200).json(bookings);
+        } catch (error) {
+            console.error('Error listing pending approvals:', error);
+            return res.status(500).json({ message: error.message });
+        }
+    }
+
+    async listConflicts(req, res) {
+        try {
+            const campusId = req.query.campusId ? Number(req.query.campusId) : Number(req.user.campusId);
+            
+            if (!campusId || isNaN(campusId)) {
+                return res.status(400).json({ message: 'Campus ID là bắt buộc' });
+            }
+
+            const conflicts = await this.bookingRepository.findConflictsByCampus(campusId);
+            return res.status(200).json(conflicts);
+        } catch (error) {
+            console.error('Error listing conflicts:', error);
+            return res.status(500).json({ message: error.message });
+        }
+    }
+
+    async approve(req, res) {
+        try {
+            const bookingId = Number(req.params.id);
+            const adminId = req.user.id;
+            
+            const result = await this.approveBooking.execute(bookingId, adminId);
+            return res.json({ message: "Duyệt đơn thành công.", data: result });
+        } catch (error) {
+            return res.status(400).json({ message: error.message });
+        }
+    }
+
+    //Từ chối đơn
+    async reject(req, res) {
+        try {
+            const bookingId = Number(req.params.id);
+            const adminId = req.user.id;
+            const { reason } = req.body;
+
+            const result = await this.rejectBooking.execute(bookingId, adminId, reason);
+            return res.json({ message: "Đã từ chối đơn.", data: result });
+        } catch (error) {
+            return res.status(400).json({ message: error.message });
+        }
+    }
+
+    // bảo vệ checkin checkout
+    async searchForGuard(req, res) {
+        try {
+            // 1. Lấy dữ liệu từ Request
+            const { keyword } = req.query;
+            const campusId = Number(req.user.campusId); // Lấy từ Token bảo vệ
+
+            // 2. Gọi Use Case (Lúc này mới truyền campusId, keyword)
+            const result = await this.searchBookingForCheckIn.execute({ campusId, keyword });
+            
+            // 3. Trả về Response
+            return res.status(200).json(result);
+        } catch (error) {
+            return res.status(400).json({ message: error.message });
+        }
+    }
+
+    async checkIn(req, res) {
+        try {
+            const bookingId = Number(req.params.id);
+            const guardId = req.user.id;
+            await this.checkInBooking.execute(bookingId, guardId);
+            return res.status(200).json({ message: "Đã xác nhận mở cửa (Check-in)." });
+        } catch (error) {
+            return res.status(400).json({ message: error.message });
+        }
+    }
+
+    async checkOut(req, res) {
+        try {
+            const bookingId = Number(req.params.id);
+            const guardId = req.user.id;
+            await this.checkOutBooking.execute(bookingId, guardId);
+            return res.status(200).json({ message: "Đã xác nhận đóng cửa (Check-out)." });
+        } catch (error) {
+            return res.status(400).json({ message: error.message });
+        }
+    }
+   // Lấy danh sách của tôi
+    async getMine(req, res) {
+        try {
+            const userId = req.user.id;
+            const result = await this.getMyBookings.execute(userId);
+            return res.status(200).json(result);
+        } catch (error) {
+            return res.status(400).json({ message: error.message });
+        }
+    }
+
+    //  Xem chi tiết
+    async getDetail(req, res) {
+        try {
+            const bookingId = Number(req.params.id);
+            const userId = req.user.id;
+            const result = await this.getBookingDetail.execute(bookingId, userId);
+            return res.status(200).json(result);
+        } catch (error) {
+            return res.status(403).json({ message: error.message });
+        }
+    }
+
+    // Hủy đơn (MW7)
+    async cancel(req, res) {
+        try {
+            const bookingId = Number(req.params.id);
+            const userId = req.user.id;
+            
+            const result = await this.cancelBookingByUser.execute(bookingId, userId);
+            return res.status(200).json({ message: "Hủy đặt phòng thành công.", data: result });
+        } catch (error) {
+            return res.status(400).json({ message: error.message });
+        }
+    }
+
+    //  MW2: Scan tính khả dụng
+    async scanRecurring(req, res) {
+        try {
+            const { originalFacilityId, startDate, weeks, slot, capacity, typeId } = req.body;
+            const campusId = req.user.campusId;
+
+            // Validate
+            if (!originalFacilityId || !startDate || !weeks || !slot) {
+                return res.status(400).json({ message: "Thiếu thông tin bắt buộc (facilityId, startDate, weeks, slot)." });
+            }
+
+            const result = await this.scanRecurringAvailability.execute({
+                originalFacilityId: Number(originalFacilityId),
+                startDate,
+                weeks: Number(weeks),
+                slot: Number(slot), // hoặc mảng nếu FE gửi mảng
+                capacity: Number(capacity),
+                typeId: Number(typeId),
+                campusId: Number(campusId)
+            });
+
+            return res.status(200).json(result);
+        } catch (error) {
+            return res.status(400).json({ message: error.message });
+        }
+    }
+
+    // MW2: Tạo Booking Recurring
+    async createRecurring(req, res) {
+        try {
+            const userId = req.user.id;
+            const { note, bookings } = req.body;
+
+            const result = await this.createRecurringBooking.execute({
+                userId,
+                note,
+                bookings
+            });
+
+            return res.status(201).json({ message: "Tạo lịch định kỳ thành công.", data: result });
+        } catch (error) {
+            return res.status(400).json({ message: error.message });
+        }
+    }
+    
+}
+
+module.exports = BookingController;
