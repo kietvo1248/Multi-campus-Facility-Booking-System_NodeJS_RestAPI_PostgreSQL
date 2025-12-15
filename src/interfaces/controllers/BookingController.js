@@ -1,7 +1,7 @@
 class BookingController {
     constructor({ findAvailableFacilities, createShortTermBooking, getClubBookingSuggestions,approveBooking, rejectBooking,
          searchBookingForCheckIn, checkInBooking, checkOutBooking, bookingRepository, getMyBookings, getBookingDetail, cancelBookingByUser,
-        scanRecurringAvailability, createRecurringBooking }) {
+        scanRecurringAvailability, createRecurringBooking, relocateBooking }) {
         this.findAvailableFacilities = findAvailableFacilities;
         this.createShortTermBooking = createShortTermBooking;
         this.getClubBookingSuggestions = getClubBookingSuggestions;
@@ -16,6 +16,7 @@ class BookingController {
         this.cancelBookingByUser = cancelBookingByUser;
         this.scanRecurringAvailability = scanRecurringAvailability;
         this.createRecurringBooking = createRecurringBooking;
+        this.relocateBooking = relocateBooking;
     }
 
     // GET /bookings/search
@@ -256,6 +257,28 @@ class BookingController {
             });
 
             return res.status(201).json({ message: "Tạo lịch định kỳ thành công.", data: result });
+        } catch (error) {
+            return res.status(400).json({ message: error.message });
+        }
+    }
+
+    // MW6: Di dời booking
+    async relocate(req, res) {
+        try {
+            const bookingId = Number(req.params.id);
+            const { newFacilityId, reason } = req.body;
+            const adminId = req.user.id;
+
+            if (!newFacilityId) return res.status(400).json({ message: "Vui lòng chọn phòng mới (newFacilityId)." });
+
+            const result = await this.relocateBooking.execute({
+                bookingId,
+                newFacilityId: Number(newFacilityId),
+                adminId,
+                reason
+            });
+
+            return res.status(200).json({ message: "Dời phòng thành công.", data: result });
         } catch (error) {
             return res.status(400).json({ message: error.message });
         }
