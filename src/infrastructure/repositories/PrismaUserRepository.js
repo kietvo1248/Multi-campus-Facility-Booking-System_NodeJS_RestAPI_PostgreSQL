@@ -80,15 +80,16 @@ class PrismaUserRepository extends IUserRepository {
         };
 
         // Lọc theo Role (STUDENT, LECTURER, FACILITY_ADMIN...)
-        if (role && role !== 'ALL') {
+        if (role && role !== 'ALL' && role !== '') {
             where.role = role;
         }
 
         // Tìm kiếm theo tên hoặc email
-        if (keyword) {
+        if (keyword && keyword.trim() !== '') {
+            const searchTerm = keyword.trim();
             where.OR = [
-                { fullName: { contains: keyword, mode: 'insensitive' } },
-                { email: { contains: keyword, mode: 'insensitive' } }
+                { fullName: { contains: searchTerm, mode: 'insensitive' } },
+                { email: { contains: searchTerm, mode: 'insensitive' } }
             ];
         }
 
