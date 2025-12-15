@@ -97,6 +97,10 @@ const ListBookingConflicts = require('./application/bookings/ListBookingConflict
 //
 const ScanRecurringAvailability = require('./application/bookings/ScanRecurringAvailability');
 const CreateRecurringBooking = require('./application/bookings/CreateRecurringBooking');
+const RelocateBooking = require('./application/bookings/RelocateBooking');
+const CheckMaintenanceImpact = require('./application/maintenance/CheckMaintenanceImpact');
+// analytics
+const GetDashboardStats = require('./application/admin/GetDashboardStats');
 
 // Instantiation
 const createShortTermBooking = new CreateShortTermBooking(bookingRepository, facilityRepository, prisma);
@@ -116,6 +120,11 @@ const listBookingConflicts = new ListBookingConflicts(bookingRepository);
 //
 const scanRecurringAvailability = new ScanRecurringAvailability(bookingRepository, facilityRepository);
 const createRecurringBooking = new CreateRecurringBooking(bookingRepository);
+const relocateBooking = new RelocateBooking(bookingRepository, facilityRepository);
+const checkMaintenanceImpact = new CheckMaintenanceImpact(bookingRepository);
+//
+const getDashboardStats = new GetDashboardStats(bookingRepository, facilityRepository);
+
 
 // --- 3. Khởi tạo Interfaces (Controllers) ---
 const AuthController = require('./interfaces/controllers/AuthController');
@@ -125,7 +134,10 @@ const UserController = require('./interfaces/controllers/UserController');
 const userController = new UserController(updateProfileUseCase, updatePasswordUseCase);
 
 const MaintenanceController = require('./interfaces/controllers/MaintenanceController');
-const maintenanceController = new MaintenanceController(setMaintenanceUseCase);
+const maintenanceController = new MaintenanceController(
+  setMaintenanceUseCase,
+  checkMaintenanceImpact 
+);
 
 const ResourceController = require('./interfaces/controllers/ResourceController');
 const resourceController = new ResourceController({ campusService, facilityTypeService, facilityService, clubService });
@@ -148,8 +160,11 @@ const bookingController = new BookingController({
   listPendingBookings,
   listBookingConflicts,
   scanRecurringAvailability,
-  createRecurringBooking
+  createRecurringBooking,
+  relocateBooking
 });
+const AnalyticsController = require('./interfaces/controllers/AnalyticsController');
+const analyticsController = new AnalyticsController(getDashboardStats);
 
 // --- 4. Setup Routes ---
 const createAuthRouter = require('./interfaces/routes/AuthRoutes');
@@ -187,6 +202,10 @@ const reportController = new ReportController(prisma);
 const createReportRouter = require('./interfaces/routes/ReportRoutes');
 const reportRouter = createReportRouter(reportController);
 
+const createAnalyticsRouter = require('./interfaces/routes/AnalyticsRoutes');
+const analyticsRouter = createAnalyticsRouter(analyticsController);
+
+
 // Swagger setup
 try {
     const swaggerDocument = YAML.load('./docs/swagger.yaml');
@@ -197,16 +216,15 @@ try {
 
 // Gắn routes
 app.use('/api/auth', authRouter);
-app.use('/api/users', userRouter);
+app.use('/api/users', userRouter);// user management
 app.use('/api/maintenance', maintenanceRouter);
 app.use('/api/campuses', campusRouter);
 app.use('/api/facility-types', facilityTypeRouter);
 app.use('/api/facilities', facilityRouter);
 app.use('/api/clubs', clubRouter);
-app.use('/api/bookings', bookingRouter);
-app.use('/api/equipment', equipmentRouter);
-app.use('/api/reports', reportRouter);
+app.use('/api/bookings', bookingRouter);// đặt phòng
 app.use('/api/resources', resourceRouter);
+app.use('/api/analytics', analyticsRouter);// thống kê
 
 // Health check
 app.get('/health', (req, res) => res.send('Server is healthy'));

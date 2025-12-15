@@ -219,9 +219,9 @@ class PrismaBookingRepository {
     });
   }
 //-_-
-  async relocateBooking({ bookingId, toFacilityId, reason, maintenanceLogId }) {
+  async relocateBooking({ bookingId, toFacilityId, reason, maintenanceLogId, changedBy }) {
     return this.prisma.$transaction(async (tx) => {
-      // Lấy thông tin cũ để ghi log
+      // Lấy thông tin cũ
       const booking = await tx.booking.findUnique({ where: { id: bookingId } });
       
       // Update sang phòng mới
@@ -235,10 +235,10 @@ class PrismaBookingRepository {
         data: {
           bookingId: bookingId,
           oldStatus: 'APPROVED',
-          newStatus: 'APPROVED', // Trạng thái vẫn là Approved
-          changeReason: reason, // "Relocated due to maintenance..."
-          previousFacilityId: booking.facilityId, // Lưu vết phòng cũ
-          changedById: null // System làm thì để null hoặc ID admin
+          newStatus: 'APPROVED',
+          changeReason: reason,
+          previousFacilityId: booking.facilityId,
+          changedBy: { connect: { id: changedBy } } // [UPDATE] Link với Admin thực hiện
         }
       });
       return updated;
@@ -532,6 +532,70 @@ class PrismaBookingRepository {
     if (conflictMaintenance) return false;
 
     return true;
+  }
+
+  // Thống kê 
+  // Đếm số booking theo status trong khoảng thời gian
+  async countBookingsByStatus(campusId, startDate, endDate) {
+    return this.prisma.booking.groupBy({
+      by: ['status'],
+      where: {
+        facility: { campusId: Number(campusId) },
+        startTime: { gte: startDate, lte: endDate }
+      },
+      _count: { id: true }
+    });
+  }
+
+  // Lấy Top phòng hot (được Approve nhiều nhất)
+  async getTopFacilities(campusId, startDate, endDate, limit = 5) {
+    const result = await this.prisma.booking.groupBy({
+      by: ['facilityId'],
+      where: {
+        facility: { campusId: Number(campusId) },
+        status: 'APPROVED',
+        startTime: { gte: startDate, lte: endDate }
+      },
+      _count: { id: true },
+      orderBy: { _count: { id: 'desc' } },
+      take: limit
+    });
+
+    // Prisma groupBy chưa hỗ trợ include relation, cần query lấy tên phòng thủ công hoặc dùng raw query
+    // Ở đây ta dùng map để lấy tên phòng
+    const enrichedResult = await Promise.all(result.map(async (item) => {
+        const facility = await this.prisma.facility.findUnique({ 
+            where: { id: item.facilityId },
+            select: { name: true, capacity: true, type: { select: { name: true } } }
+        });
+        return {
+            ...item,
+            facilityName: facility.name,
+            facilityType: facility.type.name,
+            count: item._count.id
+        };
+    }));
+
+    return enrichedResult;
+  }
+
+  // Lấy dữ liệu để vẽ biểu đồ Trend (Số booking theo ngày)
+  // Lấy raw booking (chỉ lấy field date) để JS xử lý group
+  async getBookingDates(campusId, startDate, endDate) {
+    return this.prisma.booking.findMany({
+      where: {
+        facility: { campusId: Number(campusId) },
+        startTime: { gte: startDate, lte: endDate }
+      },
+      select: { startTime: true, status: true }
+    });
+  }
+
+  // Đếm tổng số phòng active của Campus (để tính tỷ lệ lấp đầy)
+  async countTotalFacilities(campusId) {
+    return this.prisma.facility.count({
+        where: { campusId: Number(campusId), status: 'ACTIVE' }
+    });
   }
 
 }

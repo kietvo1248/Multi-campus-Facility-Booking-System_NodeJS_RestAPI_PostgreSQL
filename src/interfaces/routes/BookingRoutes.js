@@ -37,16 +37,23 @@ const createBookingRouter = (bookingController) => {
     // Xem đơn của mình
     router.get('/me', authenticate, authorize(['STUDENT', 'LECTURER', 'CLUB_LEADER']), (req, res) => bookingController.getMine(req, res));
 
-    // [MỚI] Xem chi tiết 
+    // Xem chi tiết 
     router.get('/:id', authenticate, authorize(['STUDENT', 'LECTURER', 'CLUB_LEADER']), (req, res) => bookingController.getDetail(req, res));
 
-    // [MỚI] Hủy đơn (MW7)
+    // Hủy đơn (MW7)
     router.patch('/:id/cancel', authenticate, authorize(['STUDENT', 'LECTURER', 'CLUB_LEADER']), (req, res) => bookingController.cancel(req, res));
 
-    // [MỚI] Quét lịch trống định kỳ (MW2)
+    // Quét lịch trống định kỳ (MW2)
     router.post('/recurring/scan', authenticate, authorize(['LECTURER']), (req, res) => bookingController.scanRecurring(req, res));
     router.post('/recurring', authenticate, authorize(['LECTURER']), (req, res) => bookingController.createRecurring(req, res));
-    
+
+    // Dời lịch thủ công (Admin)
+    router.patch('/:id/move', 
+        authenticate, 
+        authorize(['FACILITY_ADMIN', 'CAMPUS_ADMIN']), 
+        (req, res) => bookingController.relocate(req, res)
+    );
+
     return router;
 };
 

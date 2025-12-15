@@ -1,6 +1,7 @@
 class MaintenanceController {
-  constructor(setMaintenanceUseCase) {
+  constructor(setMaintenanceUseCase, checkMaintenanceImpactUseCase) {
     this.setMaintenanceUseCase = setMaintenanceUseCase
+    this.checkMaintenanceImpactUseCase = checkMaintenanceImpactUseCase
   }
 
   async set(req, res) {
@@ -16,6 +17,24 @@ class MaintenanceController {
       return res.status(200).json(result)
     } catch (err) {
       return res.status(500).json({ message: err.message })
+    }
+  }
+
+  async check(req, res) {
+    try {
+      const { facilityId, startDate, endDate } = req.query;
+      if (!facilityId || !startDate || !endDate) {
+        return res.status(400).json({ message: 'Missing required fields (facilityId, startDate, endDate)' });
+      }
+
+      const result = await this.checkMaintenanceImpact.execute({
+        facilityId: Number(facilityId),
+        startDate,
+        endDate
+      });
+      return res.status(200).json(result);
+    } catch (err) {
+      return res.status(500).json({ message: err.message });
     }
   }
 }
