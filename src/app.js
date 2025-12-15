@@ -130,10 +130,10 @@ const getDashboardStats = new GetDashboardStats(bookingRepository, facilityRepos
 
 // --- 3. Khởi tạo Interfaces (Controllers) ---
 const AuthController = require('./interfaces/controllers/AuthController');
-const authController = new AuthController(loginUserUseCase, viewUserProfileUseCase, loginGoogleUserUseCase, updateProfileUseCase, updatePasswordUseCase, listUsersUseCase, toggleUserStatusUseCase); // Thêm dependency còn thiếu
+const authController = new AuthController(loginUserUseCase, viewUserProfileUseCase, loginGoogleUserUseCase, updateProfileUseCase, updatePasswordUseCase); // Thêm dependency còn thiếu
 
 const UserController = require('./interfaces/controllers/UserController');
-const userController = new UserController(updateProfileUseCase, updatePasswordUseCase);
+const userController = new UserController(updateProfileUseCase, updatePasswordUseCase, listUsersUseCase, toggleUserStatusUseCase);
 
 const MaintenanceController = require('./interfaces/controllers/MaintenanceController');
 const maintenanceController = new MaintenanceController(
