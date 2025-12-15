@@ -470,10 +470,10 @@ class PrismaBookingRepository {
     return this.prisma.booking.findMany({
       where: { userId },
       include: {
-        facility: { select: { name: true, image: true } }, // Kèm tên phòng
+        facility: { select: { name: true, imageUrls: true } },
         bookingType: true,
       },
-      orderBy: { createdAt: 'desc' } // Mới nhất lên đầu
+      orderBy: { createdAt: 'desc' }
     });
   }
 
