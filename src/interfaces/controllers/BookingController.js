@@ -1,7 +1,7 @@
 class BookingController {
     constructor({ findAvailableFacilities, createShortTermBooking, getClubBookingSuggestions,approveBooking, rejectBooking,
          searchBookingForCheckIn, checkInBooking, checkOutBooking, bookingRepository, getMyBookings, getBookingDetail, cancelBookingByUser,
-        scanRecurringAvailability, createRecurringBooking, relocateBooking }) {
+        scanRecurringAvailability, createRecurringBooking, relocateBooking, viewAllBookings, listPendingBookings }) {
         this.findAvailableFacilities = findAvailableFacilities;
         this.createShortTermBooking = createShortTermBooking;
         this.getClubBookingSuggestions = getClubBookingSuggestions;
@@ -11,12 +11,16 @@ class BookingController {
         this.checkInBooking = checkInBooking;
         this.checkOutBooking = checkOutBooking;
         this.bookingRepository = bookingRepository;
+        //
         this.getMyBookings = getMyBookings;
         this.getBookingDetail = getBookingDetail;
         this.cancelBookingByUser = cancelBookingByUser;
         this.scanRecurringAvailability = scanRecurringAvailability;
         this.createRecurringBooking = createRecurringBooking;
         this.relocateBooking = relocateBooking;
+        this.viewAllBookings = viewAllBookings;
+        this.listPendingBookings = listPendingBookings;
+    
     }
 
     // GET /bookings/search
@@ -94,6 +98,22 @@ class BookingController {
             }
 
             const bookings = await this.bookingRepository.findPendingByCampus(campusId);
+            return res.status(200).json(bookings);
+        } catch (error) {
+            console.error('Error listing pending approvals:', error);
+            return res.status(500).json({ message: error.message });
+        }
+    }
+
+    async viewAllBookings(req, res) {
+        try {
+            const campusId = req.query.campusId ? Number(req.query.campusId) : Number(req.user.campusId);
+            
+            if (!campusId || isNaN(campusId)) {
+                return res.status(400).json({ message: 'Campus ID là bắt buộc' });
+            }
+
+            const bookings = await this.bookingRepository.viewAllBookings(campusId);
             return res.status(200).json(bookings);
         } catch (error) {
             console.error('Error listing pending approvals:', error);

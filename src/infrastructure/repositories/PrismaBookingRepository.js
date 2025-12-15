@@ -268,6 +268,36 @@ class PrismaBookingRepository {
     });
   }
 
+  async viewAllBookings(campusId) {
+    return this.prisma.booking.findMany({
+      where: {
+        facility: {
+          campusId: Number(campusId)
+        }
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            email: true,
+            fullName: true,
+            role: true
+          }
+        },
+        facility: {
+          include: {
+            type: true,
+            campus: true
+          }
+        },
+        bookingType: true
+      },
+      orderBy: {
+        createdAt: 'desc' // Đơn mới nhất trước
+      }
+    });
+  }
+
   // bảo vệ checkin
   async findPendingByCampus(campusId) {
     return this.prisma.booking.findMany({

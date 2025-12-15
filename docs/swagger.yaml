@@ -446,6 +446,18 @@ paths:
       responses:
         '200': { description: OK }
 
+  /bookings/all-bookings:
+    get:
+      summary: "[MỚI] Xem tất cả đơn đặt phòng"
+      tags: [5. Admin - Booking Ops]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: query
+          name: campusId
+          schema: { type: integer }
+      responses:
+        '200': { description: OK }
+
   /bookings/conflicts:
     get:
       summary: "[MW4.1] Xem danh sách xung đột"

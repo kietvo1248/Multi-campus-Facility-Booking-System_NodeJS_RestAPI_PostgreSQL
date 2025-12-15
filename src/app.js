@@ -93,7 +93,8 @@ const GetBookingDetail = require('./application/bookings/getBookingDetail');
 const CancelBookingByUser = require('./application/bookings/CancelBookingByUser');
 // [MỚI] Thêm 2 Use Case Admin
 const ListPendingBookings = require('./application/bookings/ListPendingBookings');
-const ListBookingConflicts = require('./application/bookings/ListBookingConflicts');
+const ViewAllBookings = require('./application/bookings/ViewAllBooking');
+//const ListBookingConflicts = require('./application/bookings/ListBookingConflicts');
 //
 const ScanRecurringAvailability = require('./application/bookings/ScanRecurringAvailability');
 const CreateRecurringBooking = require('./application/bookings/CreateRecurringBooking');
@@ -116,7 +117,8 @@ const getBookingDetail = new GetBookingDetail(bookingRepository);
 const cancelBookingByUser = new CancelBookingByUser(bookingRepository);
 // [MỚI] Init 2 Use Case Admin
 const listPendingBookings = new ListPendingBookings(bookingRepository);
-const listBookingConflicts = new ListBookingConflicts(bookingRepository);
+const viewAllBookings = new ViewAllBookings(bookingRepository);
+//const listBookingConflicts = new ListBookingConflicts(bookingRepository);
 //
 const scanRecurringAvailability = new ScanRecurringAvailability(bookingRepository, facilityRepository);
 const createRecurringBooking = new CreateRecurringBooking(bookingRepository);
@@ -144,24 +146,26 @@ const resourceController = new ResourceController({ campusService, facilityTypeS
 
 const BookingController = require('./interfaces/controllers/BookingController');
 const bookingController = new BookingController({ 
-  createShortTermBooking, 
+  // --- Các Use Case cũ ---
   findAvailableFacilities,
+  createShortTermBooking,
   getClubBookingSuggestions: getClubBookingSuggestionsUseCase,
   approveBooking: approveBookingUseCase,
   rejectBooking: rejectBookingUseCase,
   searchBookingForCheckIn,
   checkInBooking,
   checkOutBooking,
-  bookingRepository, // Lưu ý: Controller vẫn đang dùng trực tiếp repo cho listPending, nên cứ để lại
   getMyBookings,
   getBookingDetail,
   cancelBookingByUser,
-  // [MỚI] Inject vào Controller
-  listPendingBookings,
-  listBookingConflicts,
+  bookingRepository, 
   scanRecurringAvailability,
   createRecurringBooking,
-  relocateBooking
+  relocateBooking,
+  listPendingBookings,
+  
+  // [MỚI] Thêm vào để khớp với Constructor
+  viewAllBookings 
 });
 const AnalyticsController = require('./interfaces/controllers/AnalyticsController');
 const analyticsController = new AnalyticsController(getDashboardStats);
