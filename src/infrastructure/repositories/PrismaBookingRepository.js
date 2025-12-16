@@ -5,6 +5,54 @@ class PrismaBookingRepository {
     this.prisma = prisma
   }
 
+  //Helper: 
+  //Format dữ liệu Group để hiển thị gọn
+  _formatGroupSummary(group) {
+    const bookings = group.bookings || [];
+    if (bookings.length === 0) return null;
+
+    // Sắp xếp booking con theo thời gian
+    bookings.sort((a, b) => new Date(a.startTime) - new Date(b.startTime));
+
+    const firstBooking = bookings[0];
+    const lastBooking = bookings[bookings.length - 1];
+
+    // Tìm các slot có sự thay đổi (Ví dụ: bị dời phòng, bị hủy, hoặc khác giờ)
+    // Giả định slot chuẩn là slot của booking đầu tiên
+    const deviations = bookings.filter(b => {
+        // Logic tìm sự thay đổi: Khác phòng hoặc Trạng thái không phải Approved/Pending (tùy ngữ cảnh)
+        return b.status === 'CANCELLED' || b.status === 'REJECTED' || b.facilityId !== firstBooking.facilityId;
+    }).map(b => ({
+        date: b.startTime,
+        status: b.status,
+        facility: b.facility.name,
+        note: b.status === 'CANCELLED' ? 'Đã hủy' : 'Thay đổi phòng'
+    }));
+
+    return {
+        isGroup: true,
+        id: group.id, // Group ID
+        description: group.description || group.note,
+        createdById: group.createdById,
+        user: group.user, // Thông tin người đặt
+        
+        // Thông tin tóm tắt
+        facilityName: firstBooking.facility.name, // Phòng mặc định ban đầu
+        facilityId: firstBooking.facilityId,
+        startDate: firstBooking.startTime,
+        endDate: lastBooking.endTime,
+        totalSlots: group.totalSlots,
+        bookingType: firstBooking.bookingType,
+        
+        // Danh sách thay đổi
+        deviations: deviations,
+        // Trạng thái chung (Nếu có 1 cái Pending -> Group là Pending, nếu tất cả Approved -> Approved)
+        status: bookings.some(b => b.status === 'PENDING') ? 'PENDING_GROUP' : 'PROCESSED_GROUP'
+    };
+  }
+
+  // kết thúc helper
+
   async getApprovedBookingsOverlapping(facilityId, startDate, endDate) {
     return this.prisma.booking.findMany({
       where: {
@@ -316,36 +364,49 @@ class PrismaBookingRepository {
     });
   }
 
-  // bảo vệ checkin
+  // chờ duyệt
   async findPendingByCampus(campusId) {
-    return this.prisma.booking.findMany({
-      where: {
-        status: 'PENDING',
-        facility: {
-          campusId: Number(campusId)
-        }
-      },
-      include: {
-        user: {
-          select: {
-            id: true,
-            email: true,
-            fullName: true,
-            role: true
-          }
+    // 1. Lấy các BookingGroup có chứa booking PENDING thuộc campus này
+    const groups = await this.prisma.bookingGroup.findMany({
+        where: {
+            bookings: {
+                some: {
+                    status: 'PENDING',
+                    facility: { campusId: Number(campusId) }
+                }
+            }
         },
-        facility: {
-          include: {
-            type: true,
-            campus: true
-          }
+        include: {
+            user: { select: { id: true, fullName: true, email: true, role: true } },
+            bookings: {
+                include: { facility: true, bookingType: true }
+            }
         },
-        bookingType: true
-      },
-      orderBy: {
-        createdAt: 'asc' // Đơn cũ nhất trước
-      }
+        orderBy: { createdAt: 'asc' }
     });
+
+    // 2. Lấy các Booking ĐƠN LẺ (Không thuộc Group) đang PENDING
+    const singleBookings = await this.prisma.booking.findMany({
+        where: {
+            bookingGroupId: null, // Không thuộc group
+            status: 'PENDING',
+            facility: { campusId: Number(campusId) }
+        },
+        include: {
+            user: { select: { id: true, fullName: true, email: true, role: true } },
+            facility: { include: { type: true, campus: true } },
+            bookingType: true
+        },
+        orderBy: { createdAt: 'asc' }
+    });
+
+    // 3. Format và gộp danh sách
+    const formattedGroups = groups.map(g => this._formatGroupSummary(g)).filter(g => g !== null);
+    
+    // Đánh dấu booking lẻ để FE phân biệt
+    const formattedSingles = singleBookings.map(b => ({ ...b, isGroup: false }));
+
+    return [...formattedGroups, ...formattedSingles];
   }
 
   async findConflictsByCampus(campusId) {
@@ -485,13 +546,56 @@ class PrismaBookingRepository {
 
   //Lấy danh sách booking của 1 user
   async listByUserId(userId) {
-    return this.prisma.booking.findMany({
-      where: { userId },
-      include: {
-        facility: { select: { name: true, imageUrls: true } },
-        bookingType: true,
-      },
-      orderBy: { createdAt: 'desc' }
+    // 1. Lấy Groups của user
+    const groups = await this.prisma.bookingGroup.findMany({
+        where: { userId: Number(userId) },
+        include: {
+            bookings: {
+                include: { facility: { select: { name: true } }, bookingType: true }
+            },
+            user: { select: { fullName: true } }
+        },
+        orderBy: { createdAt: 'desc' }
+    });
+
+    // 2. Lấy Booking lẻ
+    const singles = await this.prisma.booking.findMany({
+        where: {
+            userId: Number(userId),
+            bookingGroupId: null
+        },
+        include: {
+            facility: { select: { name: true, imageUrls: true } },
+            bookingType: true,
+        },
+        orderBy: { createdAt: 'desc' }
+    });
+
+    const formattedGroups = groups.map(g => this._formatGroupSummary(g)).filter(g => g !== null);
+    const formattedSingles = singles.map(b => ({ ...b, isGroup: false }));
+
+    // Sort lại tổng thể theo thời gian tạo (tương đối)
+    return [...formattedGroups, ...formattedSingles].sort((a, b) => {
+        const timeA = a.createdAt ? new Date(a.createdAt) : new Date(a.startDate); // Group dùng startDate làm mốc
+        const timeB = b.createdAt ? new Date(b.createdAt) : new Date(b.startDate);
+        return timeB - timeA;
+    });
+  }
+
+  //  Xem chi tiết 1 Group (Khi click vào item Group trong list)
+  async findGroupById(groupId) {
+    return this.prisma.bookingGroup.findUnique({
+        where: { id: Number(groupId) },
+        include: {
+            bookings: {
+                include: {
+                    facility: { select: { id: true, name: true, type: true } },
+                    bookingType: true
+                },
+                orderBy: { startTime: 'asc' }
+            },
+            user: { select: { id: true, fullName: true, email: true } }
+        }
     });
   }
 

@@ -215,12 +215,35 @@ class BookingController {
     //  Xem chi tiết
     async getDetail(req, res) {
         try {
-            const bookingId = Number(req.params.id);
+            const id = Number(req.params.id);
+            const { isGroup } = req.query; // FE truyền thêm param ?isGroup=true nếu click vào group
             const userId = req.user.id;
-            const result = await this.getBookingDetail.execute(bookingId, userId);
+            const role = req.user.role;
+
+            let result;
+
+            if (isGroup === 'true') {
+                // 1. Nếu là Group -> Gọi hàm lấy chi tiết Group
+                result = await this.bookingRepository.findGroupById(id);
+                if (!result) return res.status(404).json({ message: "Nhóm đặt phòng không tồn tại." });
+                
+                // Check quyền (Owner hoặc Admin)
+                if (result.userId !== userId && !['FACILITY_ADMIN', 'CAMPUS_ADMIN'].includes(role)) {
+                    return res.status(403).json({ message: "Không có quyền truy cập." });
+                }
+            } else {
+                // 2. Nếu là Booking lẻ -> Gọi Use Case cũ
+                result = await this.bookingRepository.findById(id);
+                if (!result) return res.status(404).json({ message: "Booking không tồn tại." });
+                
+                if (result.userId !== userId && !['FACILITY_ADMIN', 'CAMPUS_ADMIN'].includes(role)) {
+                    return res.status(403).json({ message: "Không có quyền truy cập." });
+                }
+            }
+
             return res.status(200).json(result);
         } catch (error) {
-            return res.status(403).json({ message: error.message });
+            return res.status(500).json({ message: error.message });
         }
     }
 
