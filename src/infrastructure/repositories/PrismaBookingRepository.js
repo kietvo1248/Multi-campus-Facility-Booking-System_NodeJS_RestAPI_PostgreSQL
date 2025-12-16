@@ -186,6 +186,24 @@ class PrismaBookingRepository {
       }
     })
   }
+  // validate này dùng để ngn chặn phân thân (tránh spam)
+  async getUserConflictingBookings(userId, startTime, endTime) {
+    return this.prisma.booking.findMany({
+      where: {
+        userId: Number(userId),
+        // Kiểm tra cả APPROVED và PENDING. 
+        // Nếu user đang Pending phòng A, cũng không được đặt phòng B (tránh spam).
+        status: { in: ['APPROVED', 'PENDING'] }, 
+        startTime: { lt: endTime },
+        endTime: { gt: startTime }
+      },
+      include: {
+        facility: {
+            select: { name: true } // Lấy tên phòng để báo lỗi cho rõ
+        }
+      }
+    });
+  }
 
   // Hàm xử lý chiếm chỗ (Transaction: Hủy cũ + Tạo mới)
   async preemptAndCreate(bookingsToPreemptIds, newBookingData, reason) {
