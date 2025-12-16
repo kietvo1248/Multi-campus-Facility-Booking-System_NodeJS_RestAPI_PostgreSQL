@@ -18,7 +18,7 @@ class BookingController {
         this.scanRecurringAvailability = scanRecurringAvailability;
         this.createRecurringBooking = createRecurringBooking;
         this.relocateBooking = relocateBooking;
-        this.viewAllBookings = viewAllBookings;
+        this.viewAllBookingsUseCase = viewAllBookings;
         this.listPendingBookings = listPendingBookings;
     
     }
