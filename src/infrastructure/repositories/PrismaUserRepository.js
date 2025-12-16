@@ -1,5 +1,6 @@
 const IUserRepository = require('../../domain/repositories/IUserRepository');
 const User = require('../../domain/entities/User');
+const { id } = require('date-fns/locale');
 
 class PrismaUserRepository extends IUserRepository {
     constructor(prismaClient) {
@@ -101,7 +102,7 @@ class PrismaUserRepository extends IUserRepository {
             include: { campus: true },
             skip,
             take: Number(limit),
-            orderBy: { createdAt: 'desc' }
+            orderBy: { id: 'desc' }
         });
 
         return {
