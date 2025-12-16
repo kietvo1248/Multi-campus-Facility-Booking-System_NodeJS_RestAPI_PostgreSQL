@@ -508,11 +508,8 @@ class PrismaBookingRepository {
       // 1. Tạo Group trước
       const group = await tx.bookingGroup.create({
         data: {
-            userId: groupData.userId,
-            note: groupData.note,
-            createdById: groupData.userId,
-            createdAt: new Date(),
-            // Nếu có thêm field 'semester' hoặc 'description' thì thêm vào đây
+            description: groupData.note || groupData.description,
+            totalSlots: bookingsData.length, // Số lượng bookings trong nhóm
         }
       });
 
