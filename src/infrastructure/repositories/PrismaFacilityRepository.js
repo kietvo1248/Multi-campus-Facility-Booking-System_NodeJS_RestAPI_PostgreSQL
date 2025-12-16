@@ -44,6 +44,13 @@ class PrismaFacilityRepository {
           where.capacity = { gte: cap };
       }
     }
+
+    if (filters.equipmentTypeId) {
+      const eqId = Number(filters.equipmentTypeId);
+      if (!isNaN(eqId)) {
+        where.equipment = { some: { equipmentTypeId: eqId } };
+      }
+    }
     
     // Log để kiểm tra (Xóa khi deploy)
     // console.log('Prisma Where Clause:', JSON.stringify(where, null, 2));
@@ -61,6 +68,26 @@ class PrismaFacilityRepository {
         { status: 'asc' },
         { id: 'asc' }
       ]
+    })
+  }
+  async findByEquipmentType({ campusId, equipmentTypeId, condition }) {
+    const where = {
+      equipment: {
+        some: {
+          equipmentTypeId: Number(equipmentTypeId),
+          ...(condition ? { condition: String(condition) } : {})
+        }
+      }
+    };
+    if (campusId) where.campusId = Number(campusId);
+    return this.prisma.facility.findMany({
+      where,
+      include: {
+        type: true,
+        campus: true,
+        equipment: { include: { equipmentType: true } }
+      },
+      orderBy: [{ id: 'asc' }]
     })
   }
   async findAvailable({ campusId, typeId, minCapacity, startTime, endTime }) {

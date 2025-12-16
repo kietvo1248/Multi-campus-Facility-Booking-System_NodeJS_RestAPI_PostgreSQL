@@ -1,7 +1,8 @@
 class EquipmentController {
-  constructor({ equipmentTypeService, facilityEquipmentService }) {
+  constructor({ equipmentTypeService, facilityEquipmentService, facilityService }) {
     this.equipmentTypeService = equipmentTypeService
     this.facilityEquipmentService = facilityEquipmentService
+    this.facilityService = facilityService
   }
   async listEquipmentTypes(req, res) { try { const data = await this.equipmentTypeService.list(); res.status(200).json(data) } catch (e) { res.status(500).json({ message: e.message }) } }
   async createEquipmentType(req, res) { try { const data = await this.equipmentTypeService.create(req.body); res.status(201).json(data) } catch (e) { res.status(500).json({ message: e.message }) } }
@@ -20,6 +21,12 @@ class EquipmentController {
   } catch (e) { res.status(500).json({ message: e.message }) } }
   async removeFacilityEquipment(req, res) { try {
     const data = await this.facilityEquipmentService.remove({ facilityId: Number(req.params.facilityId), equipmentTypeId: Number(req.params.equipmentTypeId), condition: req.params.condition }); res.status(200).json({ message: 'Removed', data })
+  } catch (e) { res.status(500).json({ message: e.message }) } }
+  async listFacilitiesByEquipmentType(req, res) { try {
+    const campusId = req.query.campusId ? Number(req.query.campusId) : undefined
+    const condition = req.query.condition
+    const data = await this.facilityService.listByEquipmentType({ campusId, equipmentTypeId: Number(req.params.id), condition })
+    res.status(200).json(data)
   } catch (e) { res.status(500).json({ message: e.message }) } }
 }
 module.exports = EquipmentController
