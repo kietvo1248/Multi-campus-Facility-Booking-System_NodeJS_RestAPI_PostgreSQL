@@ -229,6 +229,8 @@ app.use('/api/clubs', clubRouter);
 app.use('/api/bookings', bookingRouter);// đặt phòng
 app.use('/api/resources', resourceRouter);
 app.use('/api/analytics', analyticsRouter);// thống kê
+app.use('/api/equipment', equipmentRouter);// thiết bị
+app.use('/api/reports', reportRouter);// báo cáo
 
 // Health check
 app.get('/health', (req, res) => res.send('Server is healthy'));
