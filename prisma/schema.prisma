@@ -1,9 +1,6 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
   output   = "../node_modules/.prisma/client"
@@ -13,7 +10,8 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
-// Enums (Định nghĩa các tập giá trị cố định)
+
+// Enums
 
 enum UserRole {
   ADMIN
@@ -24,28 +22,34 @@ enum UserRole {
 }
 
 enum BookingStatus {
-  PENDING     // Chờ duyệt
-  APPROVED    // Đã duyệt
-  REJECTED    // Admin từ chối
-  CANCELLED   // User tự hủy
-  COMPLETED   // Đã xong
-  PREEMPTED   // [Logic] Bị hủy do sự kiện ưu tiên cao hơn chiếm chỗ
-  CONFLICT    // [Logic] Bị trùng lịch ngay lúc tạo (cho tuần thứ 7 bị kẹt)
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+  COMPLETED
+  PREEMPTED
+  CONFLICT
 }
 
 enum ReportCategory {
-  DAMAGE      // Hư hại cơ sở vật chất (lúc đi tuần)
-  INCIDENT    // Sự cố, xô xát (trong booking)
+  DAMAGE
+  INCIDENT
 }
 
-// 3. Models (Các bảng)
+// ✅ NEW: condition for facility equipments (lowercase only)
+enum EquipmentCondition {
+  good
+  poor
+}
+
+// Models
 
 model Campus {
   id        Int      @id @default(autoincrement())
   name      String
   address   String?
   isActive  Boolean  @default(true)
-  
+
   // Relations
   users      User[]
   clubs      Club[]
@@ -55,39 +59,37 @@ model Campus {
 }
 
 model User {
-  id           Int      @id @default(autoincrement())
-  email        String   @unique
-  passwordHash String?
-  fullName     String
-  role         UserRole
-  googleId     String?  @unique
-  phoneNumber  String?
-  isActive     Boolean  @default(true)
-  campusId     Int
-  
+  id            Int      @id @default(autoincrement())
+  email         String   @unique
+  passwordHash  String?
+  fullName      String
+  role          UserRole
+  googleId      String?  @unique
+  phoneNumber   String?
+  isActive      Boolean  @default(true)
+  campusId      Int
+
   // Relations
-  campus              Campus    @relation(fields: [campusId], references: [id])
-  bookings            Booking[]
-  reports             Report[]
-  
-  // Quan hệ 1-1: User là Leader của 1 Club (Optional vì không phải ai cũng là Leader)
-  managedClub         Club?     
-  
-  // History tracking
-  historyChanges      BookingHistory[]
-  maintenanceReported MaintenanceLog[]
+  campus               Campus    @relation(fields: [campusId], references: [id])
+  bookings             Booking[]
+  reports              Report[]
+
+  managedClub          Club?
+
+  historyChanges       BookingHistory[]
+  maintenanceReported  MaintenanceLog[]
   createdBookingGroups BookingGroup[]
+
+  // ✅ Optional: if you want to link equipment history to user (editor)
+  equipmentHistories   FacilityEquipmentHistory[] @relation("EquipmentHistoryCreatedBy")
 
   @@map("users")
 }
 
- 
-
-// [LOGIC 1] Độ ưu tiên theo LOẠI HÌNH HOẠT ĐỘNG (Event > Class > Meeting)
 model BookingType {
   id             Int     @id @default(autoincrement())
-  name           String  // VD: "Sự kiện", "Lớp học"
-  priorityWeight Int     // VD: 100, 80
+  name           String
+  priorityWeight Int
   description    String?
 
   bookings Booking[]
@@ -97,18 +99,16 @@ model BookingType {
 
 model Club {
   id          Int      @id @default(autoincrement())
-  code        String   @unique // Mã CLB (VD: F-Code, JS)
+  code        String   @unique
   name        String
   description String?
-  
-  // Foreign Keys
-  campusId    Int
-  leaderId    Int?     @unique // Quan hệ 1-1 với User (Leader), nullable nếu chưa có leader
 
-  // Relations
+  campusId    Int
+  leaderId    Int?     @unique
+
   campus      Campus         @relation(fields: [campusId], references: [id])
-  leader      User?          @relation(fields: [leaderId], references: [id]) // Đối ứng với User.managedClub
-  priorities  ClubPriority[] // Đối ứng với quan hệ trong ClubPriority
+  leader      User?          @relation(fields: [leaderId], references: [id])
+  priorities  ClubPriority[]
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -116,22 +116,18 @@ model Club {
   @@map("clubs")
 }
 
-// [LOGIC 1] Độ ưu tiên theo ĐẶC QUYỀN CLB (Club A sở hữu Phòng B)
- 
- model ClubPriority {
+model ClubPriority {
   id            Int      @id @default(autoincrement())
   clubId        Int
   facilityId    Int
-  
-  priorityScore Int      @default(0) // Điểm ưu tiên. Ví dụ: 100 là chủ sở hữu, 0 là bình thường.
-  note          String?  // Ghi chú (VD: "Sở hữu phòng Mirror vào T3, T5")
 
-  // Relations
+  priorityScore Int      @default(0)
+  note          String?
+
   club          Club     @relation(fields: [clubId], references: [id])
-  facility      Facility @relation(fields: [facilityId], references: [id]) // Đối ứng với Facility.priorities
+  facility      Facility @relation(fields: [facilityId], references: [id])
 
-  // Đảm bảo 1 Club chỉ có 1 mức ưu tiên cho 1 Phòng cụ thể
-  @@unique([clubId, facilityId]) 
+  @@unique([clubId, facilityId])
   @@map("club_priorities")
 }
 
@@ -139,10 +135,10 @@ model FacilityType {
   id          Int     @id @default(autoincrement())
   name        String
   description String?
-  
+
   facilities Facility[]
 
-  isActive    Boolean    @default(true) @map("is_active")
+  isActive    Boolean @default(true) @map("is_active")
 
   @@map("facility_types")
 }
@@ -151,13 +147,12 @@ model Facility {
   id          Int      @id @default(autoincrement())
   name        String
   capacity    Int
-  imageUrls   Json?    // Lưu mảng string url
-  status      String   // Có thể chuyển thành Enum nếu muốn (AVAILABLE, MAINTAINANCE)
+  imageUrls   Json?
+  status      String
   description String?
   campusId    Int
   typeId      Int
 
-  // Relations
   campus      Campus              @relation(fields: [campusId], references: [id])
   type        FacilityType        @relation(fields: [typeId], references: [id])
   equipment   FacilityEquipment[]
@@ -165,9 +160,11 @@ model Facility {
   bookings    Booking[]
   maintenance MaintenanceLog[]
   reports     Report[]
-  
-  // Dùng cho BookingHistory để biết chuyển từ phòng nào
-  relocatedHistories BookingHistory[] 
+
+  relocatedHistories BookingHistory[]
+
+  // ✅ history relation (optional but useful)
+  equipmentHistories FacilityEquipmentHistory[]
 
   @@map("facilities")
 }
@@ -180,16 +177,21 @@ model EquipmentType {
 
   equipment FacilityEquipment[]
 
+  // ✅ history relation (optional but useful)
+  equipmentHistories FacilityEquipmentHistory[]
+
   @@map("equipment_types")
 }
 
 model FacilityEquipment {
   facilityId      Int
   equipmentTypeId Int
-  condition       String // VD: "Good", "Broken"
+
+  // ✅ CHANGED: String -> EquipmentCondition (lowercase)
+  condition       EquipmentCondition
+
   quantity        Int
 
-  // Relations
   facility      Facility      @relation(fields: [facilityId], references: [id], onDelete: Cascade)
   equipmentType EquipmentType @relation(fields: [equipmentTypeId], references: [id], onDelete: Cascade)
 
@@ -197,15 +199,43 @@ model FacilityEquipment {
   @@map("facility_equipments")
 }
 
-// [LOGIC 4] Nhóm Booking (Cho việc đặt 10 tuần)
+// ✅ NEW: History table for add/update/delete equipment in a facility
+model FacilityEquipmentHistory {
+  id              Int              @id @default(autoincrement())
+
+  facilityId      Int
+  equipmentTypeId Int
+
+  action          String           // "ADD" | "UPDATE" | "DELETE"
+  note            String?          // you can enforce required for UPDATE in service
+
+  oldQuantity     Int?
+  newQuantity     Int?
+
+  oldCondition    EquipmentCondition?
+  newCondition    EquipmentCondition?
+
+  createdById     Int?
+  createdAt       DateTime         @default(now())
+
+  // Relations
+  facility        Facility         @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  equipmentType   EquipmentType    @relation(fields: [equipmentTypeId], references: [id], onDelete: Cascade)
+
+  createdBy       User?            @relation("EquipmentHistoryCreatedBy", fields: [createdById], references: [id])
+
+  @@index([facilityId, equipmentTypeId])
+  @@map("facility_equipment_histories")
+}
+
 model BookingGroup {
   id          Int      @id @default(autoincrement())
   description String?
   totalSlots  Int
   createdAt   DateTime @default(now())
 
-  createdById Int      // Lưu ID người tạo
-  createdBy   User     @relation(fields: [createdById], references: [id]) // Định nghĩa quan hệ
+  createdById Int
+  createdBy   User     @relation(fields: [createdById], references: [id])
 
   bookings Booking[]
 
@@ -219,21 +249,19 @@ model Booking {
   status         BookingStatus @default(PENDING)
   attendeeCount  Int?
   isCheckedIn    Boolean       @default(false)
-  
-  // Foreign Keys
+
   userId         Int
   facilityId     Int
-  bookingGroupId Int?          // Nullable vì có thể đặt lẻ 1 buổi
+  bookingGroupId Int?
   bookingTypeId  Int
 
-  // Relations
   user         User          @relation(fields: [userId], references: [id])
   facility     Facility      @relation(fields: [facilityId], references: [id])
   group        BookingGroup? @relation(fields: [bookingGroupId], references: [id])
   bookingType  BookingType   @relation(fields: [bookingTypeId], references: [id])
-  
+
   history      BookingHistory[]
-  reports      Report[] // [Logic 2] Sự cố xảy ra trong booking này
+  reports      Report[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -244,18 +272,17 @@ model Booking {
 model BookingHistory {
   id                 Int           @id @default(autoincrement())
   bookingId          Int
-  
+
   oldStatus          BookingStatus
   newStatus          BookingStatus
-  changeReason       String?       // [Logic 3] Ghi lý do bị PREEMPTED
-  
-  previousFacilityId Int?          // [Logic 4] Lưu ID phòng cũ nếu bị đổi phòng
-  changedById        Int           // Người thực hiện thay đổi
+  changeReason       String?
 
-  // Relations
-  booking          Booking   @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  previousFacility Facility? @relation(fields: [previousFacilityId], references: [id])
-  changedBy        User      @relation(fields: [changedById], references: [id])
+  previousFacilityId Int?
+  changedById        Int
+
+  booking          Booking    @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  previousFacility Facility?  @relation(fields: [previousFacilityId], references: [id])
+  changedBy        User       @relation(fields: [changedById], references: [id])
 
   updatedAt DateTime @default(now())
 
@@ -263,12 +290,12 @@ model BookingHistory {
 }
 
 model MaintenanceLog {
-  id          Int      @id @default(autoincrement())
-  startDate   DateTime
-  endDate     DateTime?
-  reason      String?
-  status      String
-  facilityId  Int
+  id           Int      @id @default(autoincrement())
+  startDate    DateTime
+  endDate      DateTime?
+  reason       String?
+  status       String
+  facilityId   Int
   reportedById Int
 
   facility   Facility @relation(fields: [facilityId], references: [id])
@@ -277,20 +304,18 @@ model MaintenanceLog {
   @@map("maintenance_logs")
 }
 
-// [LOGIC 2] Báo cáo linh hoạt
 model Report {
   id          Int            @id @default(autoincrement())
   title       String
   description String?
-  status      String         // Pending, Processing, Done
+  status      String
   category    ReportCategory
   imageUrls   Json?
-  
+
   facilityId  Int
   reporterId  Int
-  bookingId   Int?           // Nullable: Null = đi tuần thấy, Có ID = sự cố trong booking
+  bookingId   Int?
 
-  // Relations
   facility Facility @relation(fields: [facilityId], references: [id])
   reporter User     @relation(fields: [reporterId], references: [id])
   booking  Booking? @relation(fields: [bookingId], references: [id])

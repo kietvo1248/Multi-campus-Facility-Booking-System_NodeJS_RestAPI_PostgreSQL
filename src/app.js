@@ -8,7 +8,18 @@ const YAML = require('yamljs');
 
 const app = express();
 app.use(cookieParser());
-app.use(cors());
+app.use(
+  cors({
+    origin: "http://localhost:5173", // FE Vite
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  })
+);
+
+// để chắc ăn (preflight)
+app.options(/.*/, cors());
+
 app.use(express.json());
 
 // --- 1. Khởi tạo Infrastructure ---
