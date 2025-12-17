@@ -11,11 +11,13 @@ class PrismaBookingRepository {
     const bookings = group.bookings || [];
     if (bookings.length === 0) return null;
 
+    // Sắp xếp booking con theo thời gian
     bookings.sort((a, b) => new Date(a.startTime) - new Date(b.startTime));
 
     const firstBooking = bookings[0];
     const lastBooking = bookings[bookings.length - 1];
 
+    // Tìm các slot có sự thay đổi
     const deviations = bookings.filter(b => {
         return b.status === 'CANCELLED' || b.status === 'REJECTED' || b.facilityId !== firstBooking.facilityId;
     }).map(b => ({
@@ -30,21 +32,26 @@ class PrismaBookingRepository {
         id: group.id,
         description: group.description || group.note,
         createdById: group.createdById,
+        user: group.createdBy || group.user, // User đặt
         
-        // [FIX] Sửa group.user thành group.createdBy
-        user: group.createdBy || group.user, 
-        
+        // Thông tin tóm tắt
         facilityName: firstBooking.facility.name,
         facilityId: firstBooking.facilityId,
         startDate: firstBooking.startTime,
         endDate: lastBooking.endTime,
         totalSlots: group.totalSlots,
         bookingType: firstBooking.bookingType,
+        
+        // [FIX] Thêm attendeeCount vào root object (lấy từ slot đầu tiên)
+        attendeeCount: firstBooking.attendeeCount,
+
         deviations: deviations,
-        status: bookings.some(b => b.status === 'PENDING') ? 'PENDING_GROUP' : 'PROCESSED_GROUP'
+        status: bookings.some(b => b.status === 'PENDING') ? 'PENDING_GROUP' : 'PROCESSED_GROUP',
+
+        // [FIX] Trả về danh sách bookings con để Frontend sử dụng
+        bookings: bookings 
     };
   }
-
   // kết thúc helper
 
   async getApprovedBookingsOverlapping(facilityId, startDate, endDate) {
