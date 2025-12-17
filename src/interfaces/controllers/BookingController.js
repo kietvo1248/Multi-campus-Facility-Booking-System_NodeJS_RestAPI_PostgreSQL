@@ -1,7 +1,7 @@
 class BookingController {
     constructor({ findAvailableFacilities, createShortTermBooking, getClubBookingSuggestions,approveBooking, rejectBooking,
          searchBookingForCheckIn, checkInBooking, checkOutBooking, bookingRepository, getMyBookings, getBookingDetail, cancelBookingByUser,
-        scanRecurringAvailability, createRecurringBooking, relocateBooking, viewAllBookings, listPendingBookings }) {
+        scanRecurringAvailability, createRecurringBooking, relocateBooking, viewAllBookings, listPendingBookings, getFacilitySchedule }) {
         this.findAvailableFacilities = findAvailableFacilities;
         this.createShortTermBooking = createShortTermBooking;
         this.getClubBookingSuggestions = getClubBookingSuggestions;
@@ -20,6 +20,7 @@ class BookingController {
         this.relocateBooking = relocateBooking;
         this.viewAllBookingsUseCase = viewAllBookings;
         this.listPendingBookings = listPendingBookings;
+        this.getFacilitySchedule = getFacilitySchedule;
     
     }
 
@@ -322,6 +323,27 @@ class BookingController {
             });
 
             return res.status(200).json({ message: "Dời phòng thành công.", data: result });
+        } catch (error) {
+            return res.status(400).json({ message: error.message });
+        } 
+    }
+    // API Xem lịch trình của 1 phòng
+    async getSchedule(req, res) {
+        try {
+            const { facilityId, date } = req.query;
+            const userId = req.user.id; // Để check MY_BOOKING
+
+            if (!facilityId || !date) {
+                return res.status(400).json({ message: "Thiếu facilityId hoặc date." });
+            }
+
+            const result = await this.getFacilityScheduleUseCase.execute({
+                facilityId: Number(facilityId),
+                date,
+                userId
+            });
+
+            return res.status(200).json(result);
         } catch (error) {
             return res.status(400).json({ message: error.message });
         }

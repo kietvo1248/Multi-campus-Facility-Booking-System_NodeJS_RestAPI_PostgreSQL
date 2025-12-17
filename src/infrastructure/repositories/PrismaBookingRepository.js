@@ -747,6 +747,41 @@ class PrismaBookingRepository {
     });
   }
 
+  // Lấy tất cả lịch (Booking + Maintenance) của 1 phòng trong ngày cụ thể
+  async getFacilitySchedule(facilityId, startOfDay, endOfDay) {
+    const bookings = await this.prisma.booking.findMany({
+      where: {
+        facilityId: Number(facilityId),
+        status: { in: ['APPROVED', 'PENDING'] },
+        startTime: { lt: endOfDay },
+        endTime: { gt: startOfDay }
+      },
+      select: {
+        id: true,
+        startTime: true,
+        endTime: true,
+        status: true,
+        userId: true // Để FE biết là mình đặt hay người khác
+      }
+    });
+
+    const maintenance = await this.prisma.maintenanceLog.findMany({
+      where: {
+        facilityId: Number(facilityId),
+        startDate: { lt: endOfDay },
+        OR: [{ endDate: { gt: startOfDay } }, { endDate: null }]
+      },
+      select: {
+        id: true,
+        startDate: true,
+        endDate: true,
+        reason: true
+      }
+    });
+
+    return { bookings, maintenance };
+  }
+
 }
 
 module.exports = PrismaBookingRepository
