@@ -662,6 +662,17 @@ paths:
         '201': { description: Created }
 
   /equipment/facilities/{facilityId}:
+    get:
+      summary: "[SW1] Danh sách thiết bị của phòng"
+      tags: [6. Admin - Resources & Maint]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: facilityId
+          schema: { type: integer }
+          required: true
+      responses:
+        '200': { description: OK }
     post:
       summary: "[SW1] Thêm thiết bị vào phòng"
       tags: [6. Admin - Resources & Maint]
