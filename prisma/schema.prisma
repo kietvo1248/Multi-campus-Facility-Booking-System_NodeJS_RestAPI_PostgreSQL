@@ -76,6 +76,7 @@ model User {
   // History tracking
   historyChanges      BookingHistory[]
   maintenanceReported MaintenanceLog[]
+  createdBookingGroups BookingGroup[]
 
   @@map("users")
 }
@@ -202,6 +203,9 @@ model BookingGroup {
   description String?
   totalSlots  Int
   createdAt   DateTime @default(now())
+
+  createdById Int      // Lưu ID người tạo
+  createdBy   User     @relation(fields: [createdById], references: [id]) // Định nghĩa quan hệ
 
   bookings Booking[]
 

@@ -235,7 +235,7 @@ async function main() {
         const group = await prisma.bookingGroup.create({
             data: { 
                 description: `Lớp học phần ${i+1}`, 
-                // createdById: lec.id, // [ĐÃ XÓA] Trường này không có trong Schema
+                createdById: lec.id, 
                 totalSlots: 4 
             }
         });
