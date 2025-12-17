@@ -1,3 +1,5 @@
+const { sendBookingNotification } = require('../services/EmailService');
+
 class BookingController {
     constructor({ findAvailableFacilities, createShortTermBooking, getClubBookingSuggestions,approveBooking, rejectBooking,
          searchBookingForCheckIn, checkInBooking, checkOutBooking, bookingRepository, getMyBookings, getBookingDetail, cancelBookingByUser,
@@ -140,27 +142,70 @@ class BookingController {
 
     async approve(req, res) {
         try {
-            const bookingId = Number(req.params.id);
+            const { bookingId } = req.params;
             const adminId = req.user.id;
-            
-            const result = await this.approveBooking.execute(bookingId, adminId);
-            return res.json({ message: "Duyệt đơn thành công.", data: result });
+            const { rejectedBookingIds } = req.body;
+
+            // Gọi Repo
+            const result = await this.bookingRepository.approveWithAutoRejection({
+                bookingId: parseInt(bookingId),
+                adminId,
+                rejectedBookingIds: rejectedBookingIds || []
+            });
+
+            // Gửi Mail APPROVED (Fire-and-forget)
+            if (result.user && result.user.email) {
+                sendBookingNotification(
+                    result.user.email,
+                    {
+                        roomName: result.facility.name,
+                        date: result.startTime,
+                        startTime: result.startTime,
+                        endTime: result.endTime
+                    },
+                    'APPROVED'
+                ).catch(e => console.error("Mail Error:", e));
+            }
+
+            // (Tùy chọn) Gửi mail cho các đơn bị Conflict tự động hủy
+            if (rejectedBookingIds?.length > 0) {
+                // Logic này giả định bạn có hàm lấy list booking theo ID
+                // Nếu chưa có, bạn có thể bỏ qua hoặc bổ sung findMany trong repo
+            }
+
+            return res.json({ success: true, data: result });
         } catch (error) {
-            return res.status(400).json({ message: error.message });
+            return res.status(500).json({ error: error.message });
         }
     }
 
     //Từ chối đơn
     async reject(req, res) {
         try {
-            const bookingId = Number(req.params.id);
-            const adminId = req.user.id;
+            const { bookingId } = req.params;
             const { reason } = req.body;
+            const adminId = req.user.id;
 
-            const result = await this.rejectBooking.execute(bookingId, adminId, reason);
-            return res.json({ message: "Đã từ chối đơn.", data: result });
+            // 1. Gọi Repository
+            const result = await this.bookingRepository.reject(parseInt(bookingId), adminId, reason);
+
+            // 2. Gửi Email thông báo từ chối
+            if (result.user && result.user.email) {
+                const bookingDetails = {
+                    roomName: result.facility.name,
+                    date: result.startTime,
+                    slot: `${result.startTime} - ${result.endTime}`
+                };
+
+                // Non-blocking call
+                sendBookingNotification(result.user.email, bookingDetails, 'REJECTED', reason)
+                    .catch(err => console.error("Email error:", err));
+            }
+
+            return res.json({ success: true, message: 'Đã từ chối booking.', data: result });
+
         } catch (error) {
-            return res.status(400).json({ message: error.message });
+            return res.status(500).json({ error: error.message });
         }
     }
 
@@ -313,7 +358,7 @@ class BookingController {
             const { newFacilityId, reason } = req.body;
             const adminId = req.user.id;
 
-            if (!newFacilityId) return res.status(400).json({ message: "Vui lòng chọn phòng mới (newFacilityId)." });
+            if (!newFacilityId) return res.status(400).json({ message: "Vui lòng chọn phòng mới." });
 
             const result = await this.relocateBooking.execute({
                 bookingId,
@@ -322,10 +367,25 @@ class BookingController {
                 reason
             });
 
+            // Gửi Mail RELOCATED
+            if (result.user && result.user.email) {
+                sendBookingNotification(
+                    result.user.email,
+                    {
+                        roomName: result.facility.name, // Tên phòng mới
+                        date: result.startTime,
+                        startTime: result.startTime,
+                        endTime: result.endTime
+                    },
+                    'RELOCATED',
+                    reason
+                ).catch(e => console.error("Mail Error:", e));
+            }
+
             return res.status(200).json({ message: "Dời phòng thành công.", data: result });
         } catch (error) {
             return res.status(400).json({ message: error.message });
-        } 
+        }
     }
     // API Xem lịch trình của 1 phòng
     async getSchedule(req, res) {

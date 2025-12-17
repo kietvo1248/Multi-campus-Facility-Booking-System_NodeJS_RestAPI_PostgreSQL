@@ -144,7 +144,8 @@ class PrismaBookingRepository {
     return this.prisma.$transaction(async (tx) => {
       const approved = await tx.booking.update({
         where: { id: bookingId },
-        data: { status: 'APPROVED' }
+        data: { status: 'APPROVED' },
+        include: { user: true, facility: true }
       });
       // Log cho đơn chính
       await tx.bookingHistory.create({
@@ -189,7 +190,8 @@ class PrismaBookingRepository {
     return this.prisma.$transaction(async (tx) => {
         const booking = await tx.booking.update({
             where: { id: bookingId },
-            data: { status: 'REJECTED' }
+            data: { status: 'REJECTED' },
+            include: { user: true, facility: true }
         });
 
         await tx.bookingHistory.create({
@@ -294,7 +296,8 @@ class PrismaBookingRepository {
       // Update sang phòng mới
       const updated = await tx.booking.update({
         where: { id: bookingId },
-        data: { facilityId: toFacilityId }
+        data: { facilityId: toFacilityId },
+        include: { facility: true, user: true }
       });
 
       // Ghi lịch sử
