@@ -1,72 +1,93 @@
 const { calculateTimeRangeFromSlots } = require('../utils/slotUtils');
 
 class CreateShortTermBooking {
-    constructor(bookingRepository, facilityRepository, prisma) {
-        this.bookingRepository = bookingRepository;
-        this.facilityRepository = facilityRepository;
-        this.prisma = prisma; // Cần prisma để query BookingType nếu cần thiết
+  constructor(bookingRepository, facilityRepository, prisma) {
+    this.bookingRepository = bookingRepository;
+    this.facilityRepository = facilityRepository;
+    this.prisma = prisma;
+  }
+
+  async execute({ userId, facilityId, date, slots, bookingTypeId, purpose, attendeeCount }) {
+    const { startTime, endTime } = calculateTimeRangeFromSlots(date, slots);
+
+    // 0) Chặn user tự trùng lịch (đúng)
+    const userConflicts = await this.bookingRepository.getUserConflictingBookings(userId, startTime, endTime);
+    if (userConflicts.length > 0) {
+      const conflict = userConflicts[0];
+      const conflictRoom = conflict.facility ? conflict.facility.name : 'phòng khác';
+      throw new Error(
+        `Bạn không thể đặt phòng này vì đã có lịch tại ${conflictRoom} (Trạng thái: ${conflict.status}) trong khung giờ này.`
+      );
     }
 
-    async execute({ userId, facilityId, date, slots, bookingTypeId, purpose, attendeeCount }) {
-        const { startTime, endTime } = calculateTimeRangeFromSlots(date, slots);
+    // 1) Check phòng active
+    const facility = await this.facilityRepository.findById(facilityId);
+    if (!facility || facility.status !== 'ACTIVE') throw new Error("Phòng không khả dụng.");
 
-        const userConflicts = await this.bookingRepository.getUserConflictingBookings(userId, startTime, endTime);
-        
-        if (userConflicts.length > 0) {
-            // Lấy thông tin booking đầu tiên bị trùng để báo lỗi
-            const conflict = userConflicts[0];
-            const conflictRoom = conflict.facility ? conflict.facility.name : 'phòng khác';
-            throw new Error(`Bạn không thể đặt phòng này vì đã có lịch tại ${conflictRoom} (Trạng thái: ${conflict.status}) trong khung giờ này.`);
-        }
- 
-        const facility = await this.facilityRepository.findById(facilityId);
-        if (!facility || facility.status !== 'ACTIVE') throw new Error("Phòng không khả dụng.");
+    // 2) Lấy priority của booking mới
+    const newBookingType = await this.prisma.bookingType.findUnique({
+      where: { id: Number(bookingTypeId) }
+    });
+    if (!newBookingType) throw new Error("Loại đặt phòng không hợp lệ.");
+    const newPriority = newBookingType.priorityWeight;
 
-        // 2. Lấy thông tin Priority của Booking Mới (User đang đặt)
-        // cần query bảng BookingType để biết priorityWeight của bookingTypeId được gửi lên
-        const newBookingType = await this.prisma.bookingType.findUnique({
-            where: { id: Number(bookingTypeId) }
-        });
-        if (!newBookingType) throw new Error("Loại đặt phòng không hợp lệ.");
-        const newPriority = newBookingType.priorityWeight;
+    // 3) Tìm các booking trùng giờ (repo đang trả cả APPROVED + PENDING)
+    const conflicts = await this.bookingRepository.getConflictingBookings(facilityId, startTime, endTime);
 
-        // 3. Tìm các booking đang chắn chỗ
-        const conflicts = await this.bookingRepository.getConflictingBookings(facilityId, startTime, endTime);
+    // 4) Xử lý xung đột
+    const bookingsToPreempt = [];
 
-        // 4. LOGIC XỬ LÝ XUNG ĐỘT & ĐỘ ƯU TIÊN
-        const bookingsToPreempt = [];
+    for (const conflict of conflicts) {
+      const conflictPriority = conflict.bookingType?.priorityWeight ?? 0;
+      const conflictStatus = String(conflict.status || '').toUpperCase();
 
-        for (const conflict of conflicts) {
-            const conflictPriority = conflict.bookingType.priorityWeight;
+      // ✅ NEW: PENDING không được quyền "giữ chỗ" -> không chặn người khác tạo PENDING
+      if (conflictStatus === 'PENDING') {
+        continue;
+      }
 
-            // Nếu đơn cũ có quyền LỚN HƠN hoặc BẰNG -> Không thể đè -> Báo lỗi
-            if (conflictPriority >= newPriority) {
-                throw new Error(`Xung đột lịch với '${conflict.bookingType.name}' (Ưu tiên: ${conflictPriority}). Bạn (Ưu tiên: ${newPriority}) không đủ quyền để chiếm chỗ.`);
-            }
-            
-            // Nếu đơn cũ quyền THẤP HƠN -> Đưa vào danh sách cần hủy
-            bookingsToPreempt.push(conflict.id);
+      // ✅ Chỉ xử lý cứng với APPROVED
+      if (conflictStatus === 'APPROVED') {
+        // Nếu đơn cũ có quyền LỚN HƠN hoặc BẰNG -> Không thể đè
+        if (conflictPriority >= newPriority) {
+          throw new Error(
+            `Xung đột lịch với '${conflict.bookingType.name}' (Ưu tiên: ${conflictPriority}). ` +
+            `Bạn (Ưu tiên: ${newPriority}) không đủ quyền để chiếm chỗ.`
+          );
         }
 
-        // 5. Thực hiện Transaction (Hủy cũ nếu có + Tạo mới)
-        if (bookingsToPreempt.length > 0) {
-            // Trường hợp chiếm quyền (Preemption)
-            return await this.bookingRepository.preemptAndCreate(
-                bookingsToPreempt, 
-                {
-                    userId, facilityId, bookingTypeId, startTime, endTime, 
-                    status: 'PENDING', attendeeCount
-                },
-                `Bị hủy do sự kiện ưu tiên cao hơn: ${newBookingType.name}`
-            );
-        } else {
-            // Trường hợp phòng trống bình thường (Không conflict)
-            return await this.bookingRepository.create({
-                userId, facilityId, bookingTypeId, startTime, endTime, 
-                status: 'PENDING', attendeeCount
-            });
-        }
+        // Nếu đơn cũ quyền THẤP HƠN -> Đưa vào danh sách cần hủy (preempt)
+        bookingsToPreempt.push(conflict.id);
+      }
     }
+
+    // 5) Transaction: preempt (nếu có) + tạo booking mới (luôn PENDING)
+    if (bookingsToPreempt.length > 0) {
+      return await this.bookingRepository.preemptAndCreate(
+        bookingsToPreempt,
+        {
+          userId,
+          facilityId,
+          bookingTypeId,
+          startTime,
+          endTime,
+          status: 'PENDING',
+          attendeeCount
+        },
+        `Bị hủy do sự kiện ưu tiên cao hơn: ${newBookingType.name}`
+      );
+    }
+
+    return await this.bookingRepository.create({
+      userId,
+      facilityId,
+      bookingTypeId,
+      startTime,
+      endTime,
+      status: 'PENDING',
+      attendeeCount
+    });
+  }
 }
 
 module.exports = CreateShortTermBooking;

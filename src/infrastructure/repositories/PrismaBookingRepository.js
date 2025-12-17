@@ -136,8 +136,21 @@ class PrismaBookingRepository {
   }
 
   async findById(id) {
-    return this.prisma.booking.findUnique({ where: { id }, include: { facility: true } });
-  }
+   return this.prisma.booking.findUnique({
+    where: { id },
+    include: {
+      facility: true,
+      bookingType: true,
+      history: {
+        orderBy: { updatedAt: 'desc' },
+        take: 10,
+        include: {
+          changedBy: { select: { id: true, fullName: true, role: true } }
+        }
+      }
+    }
+  });
+}
 
   // Transaction: Duyệt 1 đơn - Hủy nhiều đơn
   async approveWithAutoRejection({ bookingId, adminId, rejectedBookingIds }) {
@@ -174,7 +187,8 @@ class PrismaBookingRepository {
           bookingId: id,
           oldStatus: 'PENDING',
           newStatus: 'REJECTED',
-          changeReason: `System auto-rejected: Conflict with approved booking #${bookingId}`,
+          changeReason: `Đơn bị từ chối tự động vì trùng lịch với đơn đã được duyệt (#${bookingId}) cùng khung giờ/phòng.`,
+
           changedById: adminId
         }));
         

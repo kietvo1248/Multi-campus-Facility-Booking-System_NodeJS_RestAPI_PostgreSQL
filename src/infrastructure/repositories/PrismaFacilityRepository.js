@@ -104,7 +104,7 @@ class PrismaFacilityRepository {
         // Loại trừ các phòng đang có Booking APPROVED hoặc PENDING trong khung giờ này
         bookings: {
           none: {
-            status: { in: ['APPROVED', 'PENDING'] }, // Coi như bận nếu đang chờ duyệt hoặc đã duyệt
+             status: 'APPROVED', // Coi như bận nếu đang chờ duyệt hoặc đã duyệt
             OR: [
               {
                 startTime: { lt: endTime },
