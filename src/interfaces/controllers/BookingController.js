@@ -1,7 +1,7 @@
 class BookingController {
     constructor({ findAvailableFacilities, createShortTermBooking, getClubBookingSuggestions,approveBooking, rejectBooking,
          searchBookingForCheckIn, checkInBooking, checkOutBooking, bookingRepository, getMyBookings, getBookingDetail, cancelBookingByUser,
-        scanRecurringAvailability, createRecurringBooking, relocateBooking }) {
+        scanRecurringAvailability, createRecurringBooking, relocateBooking, viewAllBookings, listPendingBookings }) {
         this.findAvailableFacilities = findAvailableFacilities;
         this.createShortTermBooking = createShortTermBooking;
         this.getClubBookingSuggestions = getClubBookingSuggestions;
@@ -11,12 +11,16 @@ class BookingController {
         this.checkInBooking = checkInBooking;
         this.checkOutBooking = checkOutBooking;
         this.bookingRepository = bookingRepository;
+        //
         this.getMyBookings = getMyBookings;
         this.getBookingDetail = getBookingDetail;
         this.cancelBookingByUser = cancelBookingByUser;
         this.scanRecurringAvailability = scanRecurringAvailability;
         this.createRecurringBooking = createRecurringBooking;
         this.relocateBooking = relocateBooking;
+        this.viewAllBookingsUseCase = viewAllBookings;
+        this.listPendingBookings = listPendingBookings;
+    
     }
 
     // GET /bookings/search
@@ -94,6 +98,22 @@ class BookingController {
             }
 
             const bookings = await this.bookingRepository.findPendingByCampus(campusId);
+            return res.status(200).json(bookings);
+        } catch (error) {
+            console.error('Error listing pending approvals:', error);
+            return res.status(500).json({ message: error.message });
+        }
+    }
+
+    async viewAllBookings(req, res) {
+        try {
+            const campusId = req.query.campusId ? Number(req.query.campusId) : Number(req.user.campusId);
+            
+            if (!campusId || isNaN(campusId)) {
+                return res.status(400).json({ message: 'Campus ID là bắt buộc' });
+            }
+
+            const bookings = await this.bookingRepository.viewAllBookings(campusId);
             return res.status(200).json(bookings);
         } catch (error) {
             console.error('Error listing pending approvals:', error);
@@ -195,12 +215,35 @@ class BookingController {
     //  Xem chi tiết
     async getDetail(req, res) {
         try {
-            const bookingId = Number(req.params.id);
+            const id = Number(req.params.id);
+            const { isGroup } = req.query; // FE truyền thêm param ?isGroup=true nếu click vào group
             const userId = req.user.id;
-            const result = await this.getBookingDetail.execute(bookingId, userId);
+            const role = req.user.role;
+
+            let result;
+
+            if (isGroup === 'true') {
+                // 1. Nếu là Group -> Gọi hàm lấy chi tiết Group
+                result = await this.bookingRepository.findGroupById(id);
+                if (!result) return res.status(404).json({ message: "Nhóm đặt phòng không tồn tại." });
+                
+                // Check quyền (Owner hoặc Admin)
+                if (result.userId !== userId && !['FACILITY_ADMIN', 'CAMPUS_ADMIN'].includes(role)) {
+                    return res.status(403).json({ message: "Không có quyền truy cập." });
+                }
+            } else {
+                // 2. Nếu là Booking lẻ -> Gọi Use Case cũ
+                result = await this.bookingRepository.findById(id);
+                if (!result) return res.status(404).json({ message: "Booking không tồn tại." });
+                
+                if (result.userId !== userId && !['FACILITY_ADMIN', 'CAMPUS_ADMIN'].includes(role)) {
+                    return res.status(403).json({ message: "Không có quyền truy cập." });
+                }
+            }
+
             return res.status(200).json(result);
         } catch (error) {
-            return res.status(403).json({ message: error.message });
+            return res.status(500).json({ message: error.message });
         }
     }
 

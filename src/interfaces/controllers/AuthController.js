@@ -3,7 +3,9 @@ class AuthController {
     loginUserUseCase,
     viewUserProfileUseCase,
     updateProfileUseCase,
-    changePasswordUseCase
+    changePasswordUseCase,
+    listUsersUseCase,
+    toggleUserStatusUseCase
   ) {
     this.loginUserUseCase = loginUserUseCase;
     this.viewUserProfileUseCase = viewUserProfileUseCase;

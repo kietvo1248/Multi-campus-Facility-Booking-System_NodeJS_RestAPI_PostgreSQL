@@ -30,6 +30,7 @@ const createBookingRouter = (bookingController) => {
 
     // List pending approvals (Admin)
     router.get('/pending-approvals', authenticate, authorize(['FACILITY_ADMIN',]), (req, res) => bookingController.listPendingApprovals(req, res));
+    router.get('/all-bookings', authenticate, authorize(['FACILITY_ADMIN']), (req, res) => bookingController.viewAllBookings(req, res));
     
     // List conflicts (Admin)
     router.get('/conflicts', authenticate, authorize(['FACILITY_ADMIN']), (req, res) => bookingController.listConflicts(req, res));

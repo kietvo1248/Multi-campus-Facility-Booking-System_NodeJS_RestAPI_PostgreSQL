@@ -9,6 +9,15 @@ class CreateShortTermBooking {
 
     async execute({ userId, facilityId, date, slots, bookingTypeId, purpose, attendeeCount }) {
         const { startTime, endTime } = calculateTimeRangeFromSlots(date, slots);
+
+        const userConflicts = await this.bookingRepository.getUserConflictingBookings(userId, startTime, endTime);
+        
+        if (userConflicts.length > 0) {
+            // Lấy thông tin booking đầu tiên bị trùng để báo lỗi
+            const conflict = userConflicts[0];
+            const conflictRoom = conflict.facility ? conflict.facility.name : 'phòng khác';
+            throw new Error(`Bạn không thể đặt phòng này vì đã có lịch tại ${conflictRoom} (Trạng thái: ${conflict.status}) trong khung giờ này.`);
+        }
  
         const facility = await this.facilityRepository.findById(facilityId);
         if (!facility || facility.status !== 'ACTIVE') throw new Error("Phòng không khả dụng.");

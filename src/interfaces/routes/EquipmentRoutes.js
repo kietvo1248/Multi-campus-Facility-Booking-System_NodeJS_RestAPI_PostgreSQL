@@ -8,6 +8,7 @@ const createEquipmentRouter = (controller) => {
   router.post('/types', authenticate, authorize(['ADMIN','FACILITY_ADMIN']), (req,res)=>controller.createEquipmentType(req,res))
   router.put('/types/:id', authenticate, authorize(['ADMIN','FACILITY_ADMIN']), (req,res)=>controller.updateEquipmentType(req,res))
   router.delete('/types/:id', authenticate, authorize(['ADMIN','FACILITY_ADMIN']), (req,res)=>controller.deleteEquipmentType(req,res))
+  router.get('/types/:id/facilities', authenticate, authorize(['ADMIN','FACILITY_ADMIN']), (req,res)=>controller.listFacilitiesByEquipmentType(req,res))
 
   router.get('/facilities/:facilityId', authenticate, authorize(['ADMIN','FACILITY_ADMIN']), (req,res)=>controller.listFacilityEquipment(req,res))
   router.post('/facilities/:facilityId', authenticate, authorize(['ADMIN','FACILITY_ADMIN']), (req,res)=>controller.addFacilityEquipment(req,res))
