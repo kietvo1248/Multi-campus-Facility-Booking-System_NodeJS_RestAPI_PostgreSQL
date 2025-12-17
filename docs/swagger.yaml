@@ -144,6 +144,20 @@ components:
         quantity: { type: integer }
         newCondition: { type: string }
 
+    FacilityEquipmentHistory:
+      type: object
+      properties:
+        id: { type: integer }
+        facilityId: { type: integer }
+        equipmentTypeId: { type: integer }
+        action: { type: string, description: "Mô tả hành động (e.g. ADD, UPDATE, REMOVE)" }
+        note: { type: string }
+        oldQuantity: { type: integer }
+        newQuantity: { type: integer }
+        oldCondition: { type: string, enum: [good, poor] }
+        newCondition: { type: string, enum: [good, poor] }
+        createdById: { type: integer }
+        createdAt: { type: string, format: date-time }
     # --- BOOKING & PROCESS ---
     BookingInput:
       type: object
@@ -722,6 +736,35 @@ paths:
             schema: { $ref: '#/components/schemas/FacilityEquipmentAdd' }
       responses:
         '201': { description: Added }
+
+  /equipment/facilities/{facilityId}/history:
+    get:
+      summary: "[SW1] Lịch sử thay đổi thiết bị của phòng"
+      tags: [6. Admin - Resources & Maint]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: facilityId
+          required: true
+          schema: { type: integer }
+        - in: query
+          name: equipmentTypeId
+          schema: { type: integer }
+        - in: query
+          name: limit
+          schema: { type: integer }
+        - in: query
+          name: offset
+          schema: { type: integer }
+      responses:
+        '200':
+          description: List of FacilityEquipmentHistory
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FacilityEquipmentHistory'
 
   # --- SW2: Club Management ---
   /clubs:

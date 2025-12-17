@@ -1,59 +1,55 @@
-// src/application/utils/slotUtils.js
+function normalizeToYYYYMMDD(dateInput) {
+  if (!dateInput) throw new Error("Thiếu date");
 
-const SLOT_MAPPING = {
-    1: { start: 7, end: 9 },
-    2: { start: 9, end: 11 },
-    3: { start: 11, end: 13 },
-    4: { start: 13, end: 15 },
-    5: { start: 15, end: 17 }
-};
+  // YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateInput)) return dateInput;
 
-// Hàm cũ (giữ lại nếu cần dùng lẻ)
-const getTimeRangeFromSlot = (dateString, slotId) => {
-    const slot = SLOT_MAPPING[Number(slotId)];
-    if (!slot) throw new Error("Slot không hợp lệ (1-5).");
-    const baseDate = new Date(dateString);
-    const startTime = new Date(baseDate);
-    startTime.setHours(slot.start, 0, 0, 0);
-    const endTime = new Date(baseDate);
-    endTime.setHours(slot.end, 0, 0, 0);
-    return { startTime, endTime };
-};
+  // MM/DD/YYYY (FE bạn đang gửi kiểu này)
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(dateInput)) {
+    const [mm, dd, yyyy] = dateInput.split('/');
+    return `${yyyy}-${mm}-${dd}`;
+  }
 
-// [MỚI] Hàm xử lý mảng Slots
-const calculateTimeRangeFromSlots = (dateString, slots) => {
-    if (!Array.isArray(slots) || slots.length === 0) {
-        throw new Error("Danh sách slot không hợp lệ.");
-    }
+  // fallback
+  const d = new Date(dateInput);
+  if (Number.isNaN(d.getTime())) throw new Error(`Date không hợp lệ: ${dateInput}`);
 
-    // 1. Sắp xếp slot tăng dần để kiểm tra liền kề (VD: người dùng gửi [2, 1] -> [1, 2])
-    const sortedSlots = slots.map(Number).sort((a, b) => a - b);
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
 
-    // 2. Kiểm tra tính liền kề
-    for (let i = 0; i < sortedSlots.length - 1; i++) {
-        if (sortedSlots[i + 1] !== sortedSlots[i] + 1) {
-            throw new Error(`Các slot đặt phải liền kề nhau (Ví dụ: 1,2 hoặc 2,3,4). Không chấp nhận slot rời rạc (${sortedSlots[i]} và ${sortedSlots[i+1]}).`);
-        }
-    }
+function slotTimeMap(slot) {
+  const map = {
+    1: { start: '07:00', end: '09:00' },
+    2: { start: '09:00', end: '11:00' },
+    3: { start: '11:00', end: '13:00' },
+    4: { start: '13:00', end: '15:00' },
+    5: { start: '15:00', end: '17:00' }
+  };
+  return map[Number(slot)];
+}
 
-    // 3. Kiểm tra slot có tồn tại trong cấu hình không
-    const firstSlotId = sortedSlots[0];
-    const lastSlotId = sortedSlots[sortedSlots.length - 1];
+function buildVNTime(yyyyMMdd, hhmm) {
+  // ép timezone VN
+  return new Date(`${yyyyMMdd}T${hhmm}:00+07:00`);
+}
 
-    if (!SLOT_MAPPING[firstSlotId] || !SLOT_MAPPING[lastSlotId]) {
-        throw new Error("Chứa slot không hợp lệ (1-5).");
-    }
+function calculateTimeRangeFromSlots(dateInput, slots) {
+  const yyyyMMdd = normalizeToYYYYMMDD(dateInput);
 
-    // 4. Tính thời gian: Bắt đầu của Slot đầu tiên -> Kết thúc của Slot cuối cùng
-    const baseDate = new Date(dateString);
-    
-    const startTime = new Date(baseDate);
-    startTime.setHours(SLOT_MAPPING[firstSlotId].start, 0, 0, 0);
+  const sorted = [...slots].map(Number).sort((a, b) => a - b);
+  if (sorted.length === 0) throw new Error("Slots rỗng");
 
-    const endTime = new Date(baseDate);
-    endTime.setHours(SLOT_MAPPING[lastSlotId].end, 0, 0, 0);
+  const first = slotTimeMap(sorted[0]);
+  const last = slotTimeMap(sorted[sorted.length - 1]);
+  if (!first || !last) throw new Error("Slot không hợp lệ");
 
-    return { startTime, endTime };
-};
+  const startTime = buildVNTime(yyyyMMdd, first.start);
+  const endTime = buildVNTime(yyyyMMdd, last.end);
 
-module.exports = { getTimeRangeFromSlot, calculateTimeRangeFromSlots };
+  return { startTime, endTime };
+}
+
+module.exports = { calculateTimeRangeFromSlots };
