@@ -92,11 +92,11 @@ class AuthController {
     passport.authenticate("google", { session: false }, (err, data) => {
       if (err) {
         const errorMessage = encodeURIComponent(err.message);
-        return res.redirect(`http://localhost:5000/login?error=${errorMessage}`);
+        return res.redirect(process.env.FRONTEND_URL + "/login?error=${errorMessage}");
       }
 
       if (!data) {
-        return res.redirect("http://localhost:5000/login?error=AuthenticationFailed");
+        return res.redirect(process.env.FRONTEND_URL + "/login?error=AuthenticationFailed");
       }
 
       const { token } = data;
@@ -111,7 +111,7 @@ class AuthController {
         path: "/",
       });
 
-      return res.redirect("http://localhost:5000");
+      return res.redirect(process.env.FRONTEND_URL);
     })(req, res, next);
   }
 }
