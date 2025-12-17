@@ -79,7 +79,7 @@ const clubService = new ClubService(clubRepository, clubPriorityRepository, user
 const equipmentTypeService = new EquipmentTypeService(equipmentTypeRepository);
 const facilityEquipmentService = new FacilityEquipmentService(facilityEquipmentRepository);
 
-// 2.3 Booking Use Cases (Đã chuẩn hóa tên file PascalCase)
+// 2.3 Booking Use Cases 
 const CreateShortTermBooking = require('./application/bookings/createShortTermBooking');
 const FindAvailableFacilities = require('./application/bookings/findAvailableFacilities');
 const GetClubBookingSuggestions = require('./application/bookings/getClubBookingSuggestions');
@@ -94,6 +94,7 @@ const CancelBookingByUser = require('./application/bookings/CancelBookingByUser'
 // [MỚI] Thêm 2 Use Case Admin
 const ListPendingBookings = require('./application/bookings/ListPendingBookings');
 const ViewAllBookings = require('./application/bookings/ViewAllBooking');
+const GetFacilitySchedule = require('./application/bookings/GetFacilitySchedule');
 //const ListBookingConflicts = require('./application/bookings/ListBookingConflicts');
 //
 const ScanRecurringAvailability = require('./application/bookings/ScanRecurringAvailability');
@@ -117,6 +118,7 @@ const getBookingDetail = new GetBookingDetail(bookingRepository);
 const cancelBookingByUser = new CancelBookingByUser(bookingRepository);
 // [MỚI] Init 2 Use Case Admin
 const listPendingBookings = new ListPendingBookings(bookingRepository);
+const getFacilitySchedule = new GetFacilitySchedule(bookingRepository);
 const viewAllBookings = new ViewAllBookings(bookingRepository);
 //const listBookingConflicts = new ListBookingConflicts(bookingRepository);
 //
@@ -163,9 +165,8 @@ const bookingController = new BookingController({
   createRecurringBooking,
   relocateBooking,
   listPendingBookings,
-  
-  // [MỚI] Thêm vào để khớp với Constructor
-  viewAllBookings 
+  viewAllBookings,
+  getFacilitySchedule 
 });
 const AnalyticsController = require('./interfaces/controllers/AnalyticsController');
 const analyticsController = new AnalyticsController(getDashboardStats);

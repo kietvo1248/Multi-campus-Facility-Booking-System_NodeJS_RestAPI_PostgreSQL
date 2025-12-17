@@ -358,6 +358,41 @@ paths:
       responses:
         '200': { description: OK }
 
+  /bookings/facility-schedule:
+    get:
+      summary: Xem trạng thái các Slot của 1 phòng (Grid View)
+      description: API này trả về trạng thái (Available/Booked/Maintenance) của từng slot trong ngày để vẽ giao diện chọn giờ.
+      tags: [2. Student & Lecturer]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: query
+          name: facilityId
+          required: true
+          schema: { type: integer }
+        - in: query
+          name: date
+          required: true
+          schema: { type: string, format: date, example: "2025-10-25" }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              example:
+                - slotId: 1
+                  startTime: "07:00"
+                  endTime: "09:00"
+                  status: "AVAILABLE"
+                - slotId: 2
+                  startTime: "09:00"
+                  endTime: "11:00"
+                  status: "BOOKED"
+                  details: { status: "APPROVED" }
+                - slotId: 3
+                  startTime: "13:00"
+                  endTime: "15:00"
+                  status: "MY_BOOKING"
+
   /bookings/{id}/cancel:
     patch:
       summary: "[MW7] Tự hủy đặt phòng"

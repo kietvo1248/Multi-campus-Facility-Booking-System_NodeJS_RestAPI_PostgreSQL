@@ -8,9 +8,9 @@ const createBookingRouter = (bookingController) => {
     router.get('/search', authenticate, authorize(['STUDENT', 'LECTURER', 'FACILITY_ADMIN']), (req, res) => bookingController.search(req, res));
 
     // Đặt phòng
-    router.post('/', authenticate, authorize(['STUDENT', 'LECTURER']), (req, res) => bookingController.create(req, res));
+    router.post('/', authenticate, authorize(['STUDENT', 'LECTURER', 'FACILITY_ADMIN']), (req, res) => bookingController.create(req, res));
     // Gợi ý phòng cho Club Leader
-    router.get('/club-suggestions', authenticate, authorize(['STUDENT']), (req, res) => bookingController.suggestForClub(req, res));
+    router.get('/club-suggestions', authenticate, authorize(['STUDENT', 'FACILITY_ADMIN']), (req, res) => bookingController.suggestForClub(req, res));
     // Duyệt đơn
     router.patch('/:id/approve', 
         authenticate, 
@@ -36,13 +36,13 @@ const createBookingRouter = (bookingController) => {
     router.get('/conflicts', authenticate, authorize(['FACILITY_ADMIN']), (req, res) => bookingController.listConflicts(req, res));
 
     // Xem đơn của mình
-    router.get('/me', authenticate, authorize(['STUDENT', 'LECTURER']), (req, res) => bookingController.getMine(req, res));
+    router.get('/me', authenticate, authorize(['STUDENT', 'LECTURER', 'FACILITY_ADMIN']), (req, res) => bookingController.getMine(req, res));
 
     // Xem chi tiết 
-    router.get('/:id', authenticate, authorize(['STUDENT', 'LECTURER']), (req, res) => bookingController.getDetail(req, res));
+    router.get('/:id', authenticate, authorize(['STUDENT', 'LECTURER', 'FACILITY_ADMIN']), (req, res) => bookingController.getDetail(req, res));
 
     // Hủy đơn (MW7)
-    router.patch('/:id/cancel', authenticate, authorize(['STUDENT', 'LECTURER']), (req, res) => bookingController.cancel(req, res));
+    router.patch('/:id/cancel', authenticate, authorize(['STUDENT', 'LECTURER', 'FACILITY_ADMIN']), (req, res) => bookingController.cancel(req, res));
 
     // Quét lịch trống định kỳ (MW2)
     router.post('/recurring/scan', authenticate, authorize(['LECTURER']), (req, res) => bookingController.scanRecurring(req, res));
@@ -54,6 +54,9 @@ const createBookingRouter = (bookingController) => {
         authorize(['FACILITY_ADMIN']), 
         (req, res) => bookingController.relocate(req, res)
     );
+
+    // Lấy lịch sử dụng của một cơ sở vật chất trong ngày (MW6)
+    router.get('/facility-schedule', authenticate, authorize(['STUDENT', 'LECTURER', 'FACILITY_ADMIN']), (req, res) => bookingController.getSchedule(req, res));
 
     return router;
 };

@@ -17,10 +17,8 @@ class PrismaBookingRepository {
     const firstBooking = bookings[0];
     const lastBooking = bookings[bookings.length - 1];
 
-    // Tìm các slot có sự thay đổi (Ví dụ: bị dời phòng, bị hủy, hoặc khác giờ)
-    // Giả định slot chuẩn là slot của booking đầu tiên
+    // Tìm các slot có sự thay đổi
     const deviations = bookings.filter(b => {
-        // Logic tìm sự thay đổi: Khác phòng hoặc Trạng thái không phải Approved/Pending (tùy ngữ cảnh)
         return b.status === 'CANCELLED' || b.status === 'REJECTED' || b.facilityId !== firstBooking.facilityId;
     }).map(b => ({
         date: b.startTime,
@@ -31,26 +29,29 @@ class PrismaBookingRepository {
 
     return {
         isGroup: true,
-        id: group.id, // Group ID
+        id: group.id,
         description: group.description || group.note,
         createdById: group.createdById,
-        user: group.user, // Thông tin người đặt
+        user: group.createdBy || group.user, // User đặt
         
         // Thông tin tóm tắt
-        facilityName: firstBooking.facility.name, // Phòng mặc định ban đầu
+        facilityName: firstBooking.facility.name,
         facilityId: firstBooking.facilityId,
         startDate: firstBooking.startTime,
         endDate: lastBooking.endTime,
         totalSlots: group.totalSlots,
         bookingType: firstBooking.bookingType,
         
-        // Danh sách thay đổi
+        // [FIX] Thêm attendeeCount vào root object (lấy từ slot đầu tiên)
+        attendeeCount: firstBooking.attendeeCount,
+
         deviations: deviations,
-        // Trạng thái chung (Nếu có 1 cái Pending -> Group là Pending, nếu tất cả Approved -> Approved)
-        status: bookings.some(b => b.status === 'PENDING') ? 'PENDING_GROUP' : 'PROCESSED_GROUP'
+        status: bookings.some(b => b.status === 'PENDING') ? 'PENDING_GROUP' : 'PROCESSED_GROUP',
+
+        // [FIX] Trả về danh sách bookings con để Frontend sử dụng
+        bookings: bookings 
     };
   }
-
   // kết thúc helper
 
   async getApprovedBookingsOverlapping(facilityId, startDate, endDate) {
@@ -366,7 +367,7 @@ class PrismaBookingRepository {
 
   // chờ duyệt
   async findPendingByCampus(campusId) {
-    // 1. Lấy các BookingGroup có chứa booking PENDING thuộc campus này
+    // 1. Lấy các BookingGroup có chứa booking PENDING
     const groups = await this.prisma.bookingGroup.findMany({
         where: {
             bookings: {
@@ -377,7 +378,8 @@ class PrismaBookingRepository {
             }
         },
         include: {
-            user: { select: { id: true, fullName: true, email: true, role: true } },
+            // [FIX] BookingGroup quan hệ với User qua createdBy
+            createdBy: { select: { id: true, fullName: true, email: true, role: true } },
             bookings: {
                 include: { facility: true, bookingType: true }
             }
@@ -385,10 +387,10 @@ class PrismaBookingRepository {
         orderBy: { createdAt: 'asc' }
     });
 
-    // 2. Lấy các Booking ĐƠN LẺ (Không thuộc Group) đang PENDING
+    // 2. Lấy các Booking ĐƠN LẺ
     const singleBookings = await this.prisma.booking.findMany({
         where: {
-            bookingGroupId: null, // Không thuộc group
+            bookingGroupId: null,
             status: 'PENDING',
             facility: { campusId: Number(campusId) }
         },
@@ -400,10 +402,8 @@ class PrismaBookingRepository {
         orderBy: { createdAt: 'asc' }
     });
 
-    // 3. Format và gộp danh sách
+    // 3. Format
     const formattedGroups = groups.map(g => this._formatGroupSummary(g)).filter(g => g !== null);
-    
-    // Đánh dấu booking lẻ để FE phân biệt
     const formattedSingles = singleBookings.map(b => ({ ...b, isGroup: false }));
 
     return [...formattedGroups, ...formattedSingles];
@@ -546,14 +546,14 @@ class PrismaBookingRepository {
 
   //Lấy danh sách booking của 1 user
   async listByUserId(userId) {
-    // 1. Lấy Groups của user
+    // 1. Lấy Groups
     const groups = await this.prisma.bookingGroup.findMany({
-        where: { userId: Number(userId) },
+        where: { createdById: Number(userId) }, // Lọc theo createdById
         include: {
             bookings: {
                 include: { facility: { select: { name: true } }, bookingType: true }
             },
-            user: { select: { fullName: true } }
+            createdBy: { select: { fullName: true } } // Sửa user -> createdBy
         },
         orderBy: { createdAt: 'desc' }
     });
@@ -574,15 +574,14 @@ class PrismaBookingRepository {
     const formattedGroups = groups.map(g => this._formatGroupSummary(g)).filter(g => g !== null);
     const formattedSingles = singles.map(b => ({ ...b, isGroup: false }));
 
-    // Sort lại tổng thể theo thời gian tạo (tương đối)
     return [...formattedGroups, ...formattedSingles].sort((a, b) => {
-        const timeA = a.createdAt ? new Date(a.createdAt) : new Date(a.startDate); // Group dùng startDate làm mốc
+        const timeA = a.createdAt ? new Date(a.createdAt) : new Date(a.startDate);
         const timeB = b.createdAt ? new Date(b.createdAt) : new Date(b.startDate);
         return timeB - timeA;
     });
   }
 
-  //  Xem chi tiết 1 Group (Khi click vào item Group trong list)
+  // [FIXED] Sửa include user -> createdBy
   async findGroupById(groupId) {
     return this.prisma.bookingGroup.findUnique({
         where: { id: Number(groupId) },
@@ -594,7 +593,7 @@ class PrismaBookingRepository {
                 },
                 orderBy: { startTime: 'asc' }
             },
-            user: { select: { id: true, fullName: true, email: true } }
+            createdBy: { select: { id: true, fullName: true, email: true } } // Sửa user -> createdBy
         }
     });
   }
@@ -631,6 +630,7 @@ class PrismaBookingRepository {
       const group = await tx.bookingGroup.create({
         data: {
             description: groupData.note || groupData.description,
+            createdById: groupData.userId,
             totalSlots: bookingsData.length, // Số lượng bookings trong nhóm
         }
       });
@@ -745,6 +745,41 @@ class PrismaBookingRepository {
     return this.prisma.facility.count({
         where: { campusId: Number(campusId), status: 'ACTIVE' }
     });
+  }
+
+  // Lấy tất cả lịch (Booking + Maintenance) của 1 phòng trong ngày cụ thể
+  async getFacilitySchedule(facilityId, startOfDay, endOfDay) {
+    const bookings = await this.prisma.booking.findMany({
+      where: {
+        facilityId: Number(facilityId),
+        status: { in: ['APPROVED', 'PENDING'] },
+        startTime: { lt: endOfDay },
+        endTime: { gt: startOfDay }
+      },
+      select: {
+        id: true,
+        startTime: true,
+        endTime: true,
+        status: true,
+        userId: true // Để FE biết là mình đặt hay người khác
+      }
+    });
+
+    const maintenance = await this.prisma.maintenanceLog.findMany({
+      where: {
+        facilityId: Number(facilityId),
+        startDate: { lt: endOfDay },
+        OR: [{ endDate: { gt: startOfDay } }, { endDate: null }]
+      },
+      select: {
+        id: true,
+        startDate: true,
+        endDate: true,
+        reason: true
+      }
+    });
+
+    return { bookings, maintenance };
   }
 
 }
