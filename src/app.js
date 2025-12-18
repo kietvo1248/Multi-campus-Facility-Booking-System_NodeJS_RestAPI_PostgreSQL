@@ -102,6 +102,7 @@ const CheckOutBooking = require('./application/bookings/CheckOutBooking');
 const GetMyBookings = require('./application/bookings/GetMyBookings'); // Đảm bảo file tên là GetMyBookings.js
 const GetBookingDetail = require('./application/bookings/getBookingDetail');
 const CancelBookingByUser = require('./application/bookings/CancelBookingByUser');
+const CancelBookingByAdmin = require('./application/bookings/CancelBookingByAdmin');
 // [MỚI] Thêm 2 Use Case Admin
 const ListPendingBookings = require('./application/bookings/ListPendingBookings');
 const ViewAllBookings = require('./application/bookings/ViewAllBooking');
@@ -127,6 +128,7 @@ const checkOutBooking = new CheckOutBooking(bookingRepository);
 const getMyBookings = new GetMyBookings(bookingRepository);
 const getBookingDetail = new GetBookingDetail(bookingRepository);
 const cancelBookingByUser = new CancelBookingByUser(bookingRepository);
+const cancelBookingByAdmin = new CancelBookingByAdmin(bookingRepository);
 // [MỚI] Init 2 Use Case Admin
 const listPendingBookings = new ListPendingBookings(bookingRepository);
 const getFacilitySchedule = new GetFacilitySchedule(bookingRepository);
@@ -171,6 +173,7 @@ const bookingController = new BookingController({
   getMyBookings,
   getBookingDetail,
   cancelBookingByUser,
+  cancelBookingByAdmin,
   bookingRepository, 
   scanRecurringAvailability,
   createRecurringBooking,

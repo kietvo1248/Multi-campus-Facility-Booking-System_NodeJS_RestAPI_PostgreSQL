@@ -733,6 +733,36 @@ async createAndCancelNew(newBookingData, reason) {
     });
   }
 
+  // Admin hủy lịch (khi không tìm được phòng thay thế)
+  async cancelByAdmin(bookingId, adminId, reason) {
+    return this.prisma.$transaction(async (tx) => {
+      // 1. Cập nhật trạng thái Booking
+      const updated = await tx.booking.update({
+        where: { id: bookingId },
+        data: { status: 'CANCELLED' },
+        // [BẮT BUỘC] Include để lấy email user và tên phòng gửi mail
+        include: {
+            user: true,
+            facility: true
+        }
+      });
+
+      // 2. Ghi lịch sử thay đổi
+      await tx.bookingHistory.create({
+        data: {
+          bookingId: bookingId,
+          oldStatus: 'APPROVED', // Thường là hủy lịch đã duyệt
+          newStatus: 'CANCELLED',
+          changeReason: reason || 'Admin cancelled (No alternative room)',
+          previousFacilityId: updated.facilityId,
+          changedById: adminId // ID của Admin thực hiện
+        }
+      });
+
+      return updated;
+    });
+  }
+
   async createRecurring(groupData, bookingsData) {
     return this.prisma.$transaction(async (tx) => {
       const group = await tx.bookingGroup.create({
@@ -874,6 +904,8 @@ async createAndCancelNew(newBookingData, reason) {
 
     return { bookings, maintenance };
   }
+
+
 }
 
 module.exports = PrismaBookingRepository

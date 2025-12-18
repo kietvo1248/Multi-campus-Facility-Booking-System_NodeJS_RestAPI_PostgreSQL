@@ -107,6 +107,16 @@ const sendBookingNotification = async (userEmail, bookingDetails, type, reason =
                     <p>Dưới đây là thông tin phòng mới:</p>
                 `;
                 break;
+            case 'CANCELLED_BY_ADMIN': // [MỚI] Admin hủy lịch đã duyệt
+                subject = '⚠️ [Booking] Thông báo hủy lịch đặt phòng';
+                bodyContent = `
+                    <h2 style="color: #dc3545;">Lịch đặt phòng đã bị hủy</h2>
+                    <p>Xin chào,</p>
+                    <p>Admin đã hủy lịch đặt phòng của bạn (do sự cố phòng hoặc không tìm được phòng thay thế).</p>
+                    <p><strong>Lý do hủy:</strong> ${reason}</p>
+                    <p>Chúng tôi rất tiếc vì sự bất tiện này. Vui lòng thử đặt lại vào khung giờ khác.</p>
+        `;
+        break;
 
             default:
                 return;

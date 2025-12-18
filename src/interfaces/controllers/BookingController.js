@@ -14,6 +14,7 @@ class BookingController {
     getMyBookings,
     getBookingDetail,
     cancelBookingByUser,
+    cancelBookingByAdmin,
     scanRecurringAvailability,
     createRecurringBooking,
     relocateBooking,
@@ -34,6 +35,7 @@ class BookingController {
     this.getMyBookings = getMyBookings;
     this.getBookingDetail = getBookingDetail;
     this.cancelBookingByUser = cancelBookingByUser;
+    this.cancelBookingByAdmin = cancelBookingByAdmin;
     this.scanRecurringAvailability = scanRecurringAvailability;
     this.createRecurringBooking = createRecurringBooking;
     this.relocateBooking = relocateBooking;
@@ -220,9 +222,6 @@ async approve(req, res) {
 }
 
 
-
-
-
   async reject(req, res) {
     try {
       const { bookingId } = req.params;
@@ -334,6 +333,46 @@ async approve(req, res) {
       return res.status(200).json({ message: 'Hủy đặt phòng thành công.', data: result });
     } catch (error) {
       return res.status(400).json({ message: error.message });
+    }
+  }
+
+  async cancelByAdmin(req, res) {
+    try {
+      const bookingId = Number(req.params.id);
+      const { reason } = req.body;
+      const adminId = req.user.id; // Lấy từ token
+
+      // 1. Gọi Use Case (Thay vì gọi repo trực tiếp)
+      const result = await this.cancelBookingByAdminUseCase.execute({
+        bookingId,
+        adminId,
+        reason
+      });
+
+      // 2. Gửi Email (Controller lo việc phản hồi user)
+      if (result.user && result.user.email) {
+        sendBookingNotification(
+          result.user.email,
+          {
+            roomName: result.facility.name,
+            date: result.startTime,
+            startTime: result.startTime,
+            endTime: result.endTime
+          },
+          'CANCELLED_BY_ADMIN', 
+          reason
+        ).catch(err => console.error("Mail cancel error:", err));
+      }
+
+      return res.status(200).json({ 
+        success: true, 
+        message: "Đã hủy lịch thành công.", 
+        data: result 
+      });
+
+    } catch (error) {
+      const status = error.message.includes("không tồn tại") ? 404 : 400;
+      return res.status(status).json({ message: error.message });
     }
   }
 
