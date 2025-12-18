@@ -385,11 +385,15 @@ async approve(req, res) {
         return res.status(400).json({ message: 'Thiếu thông tin bắt buộc (facilityId, startDate, weeks, slot).' });
       }
 
+      const processedSlot = Array.isArray(slot) 
+          ? slot.map(s => Number(s)) 
+          : Number(slot);
+
       const result = await this.scanRecurringAvailability.execute({
         originalFacilityId: Number(originalFacilityId),
         startDate,
         weeks: Number(weeks),
-        slot: Number(slot),
+        slot: processedSlot,
         capacity: Number(capacity),
         typeId: Number(typeId),
         campusId: Number(campusId)

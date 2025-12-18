@@ -52,4 +52,9 @@ function calculateTimeRangeFromSlots(dateInput, slots) {
   return { startTime, endTime };
 }
 
-module.exports = { calculateTimeRangeFromSlots };
+function getTimeRangeFromSlot(dateInput, slot) {
+    // Tận dụng hàm calculateTimeRangeFromSlots bằng cách truyền mảng [slot]
+    return calculateTimeRangeFromSlots(dateInput, [slot]);
+}
+
+module.exports = { calculateTimeRangeFromSlots, getTimeRangeFromSlot, normalizeToYYYYMMDD, slotTimeMap, buildVNTime};
