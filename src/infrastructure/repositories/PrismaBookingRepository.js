@@ -2,7 +2,7 @@
 
 class PrismaBookingRepository {
   constructor(prisma) {
-    this.prisma = prisma
+    this.prisma = prisma;
   }
 
   //Helper:
@@ -15,14 +15,20 @@ class PrismaBookingRepository {
     const firstBooking = bookings[0];
     const lastBooking = bookings[bookings.length - 1];
 
-    const deviations = bookings.filter(b => {
-      return b.status === 'CANCELLED' || b.status === 'REJECTED' || b.facilityId !== firstBooking.facilityId;
-    }).map(b => ({
-      date: b.startTime,
-      status: b.status,
-      facility: b.facility.name,
-      note: b.status === 'CANCELLED' ? 'Đã hủy' : 'Thay đổi phòng'
-    }));
+    const deviations = bookings
+      .filter((b) => {
+        return (
+          b.status === "CANCELLED" ||
+          b.status === "REJECTED" ||
+          b.facilityId !== firstBooking.facilityId
+        );
+      })
+      .map((b) => ({
+        date: b.startTime,
+        status: b.status,
+        facility: b.facility.name,
+        note: b.status === "CANCELLED" ? "Đã hủy" : "Thay đổi phòng",
+      }));
 
     return {
       isGroup: true,
@@ -41,9 +47,11 @@ class PrismaBookingRepository {
       attendeeCount: firstBooking.attendeeCount,
 
       deviations: deviations,
-      status: bookings.some(b => b.status === 'PENDING') ? 'PENDING_GROUP' : 'PROCESSED_GROUP',
+      status: bookings.some((b) => b.status === "PENDING")
+        ? "PENDING_GROUP"
+        : "PROCESSED_GROUP",
 
-      bookings: bookings
+      bookings: bookings,
     };
   }
   // end helper
@@ -52,46 +60,54 @@ class PrismaBookingRepository {
     return this.prisma.booking.findMany({
       where: {
         facilityId: Number(facilityId),
-        status: 'APPROVED',
+        status: "APPROVED",
         startTime: { lt: endDate },
-        endTime: { gt: startDate }
-      }
+        endTime: { gt: startDate },
+      },
     });
   }
 
   async getFacilityById(id) {
-    return this.prisma.facility.findUnique({ where: { id } })
+    return this.prisma.facility.findUnique({ where: { id } });
   }
 
-  async findAlternativeFacility({ campusId, typeId, minCapacity, startDate, endDate }) {
+  async findAlternativeFacility({
+    campusId,
+    typeId,
+    minCapacity,
+    startDate,
+    endDate,
+  }) {
     const candidates = await this.prisma.facility.findMany({
       where: {
         campusId: Number(campusId),
         typeId,
         capacity: { gte: minCapacity },
-        status: 'ACTIVE'
+        status: "ACTIVE",
       },
-      orderBy: { capacity: 'asc' }
+      orderBy: { capacity: "asc" },
     });
 
     for (const f of candidates) {
       const overlappingApproved = await this.prisma.booking.findFirst({
         where: {
           facilityId: f.id,
-          status: 'APPROVED',
+          status: "APPROVED",
           startTime: { lt: endDate },
-          endTime: { gt: startDate }
-        }
+          endTime: { gt: startDate },
+        },
       });
       if (overlappingApproved) continue;
 
-      const overlappingMaintenance = await this.prisma.maintenanceLog.findFirst({
-        where: {
-          facilityId: f.id,
-          startDate: { lt: endDate },
-          OR: [{ endDate: { gt: startDate } }, { endDate: null }]
+      const overlappingMaintenance = await this.prisma.maintenanceLog.findFirst(
+        {
+          where: {
+            facilityId: f.id,
+            startDate: { lt: endDate },
+            OR: [{ endDate: { gt: startDate } }, { endDate: null }],
+          },
         }
-      });
+      );
       if (overlappingMaintenance) continue;
 
       return f;
@@ -103,11 +119,11 @@ class PrismaBookingRepository {
     return this.prisma.booking.findMany({
       where: {
         facilityId,
-        status: 'PENDING',
+        status: "PENDING",
         id: { not: excludeBookingId },
         startTime: { lt: endTime },
-        endTime: { gt: startTime }
-      }
+        endTime: { gt: startTime },
+      },
     });
   }
 
@@ -115,10 +131,10 @@ class PrismaBookingRepository {
     return this.prisma.booking.findFirst({
       where: {
         facilityId,
-        status: 'APPROVED',
+        status: "APPROVED",
         startTime: { lt: endTime },
-        endTime: { gt: startTime }
-      }
+        endTime: { gt: startTime },
+      },
     });
   }
 
@@ -129,91 +145,94 @@ class PrismaBookingRepository {
         facility: true,
         bookingType: true,
         history: {
-          orderBy: { updatedAt: 'desc' },
+          orderBy: { updatedAt: "desc" },
           take: 10,
           include: {
-            changedBy: { select: { id: true, fullName: true, role: true } }
-          }
-        }
-      }
+            changedBy: { select: { id: true, fullName: true, role: true } },
+          },
+        },
+      },
     });
   }
 
-async approveWithAutoRejection({ bookingId, adminId, rejectedBookingIds = [] }) {
-  return this.prisma.$transaction(async (tx) => {
-    // 1) Approve đơn chính
-    const approved = await tx.booking.update({
-      where: { id: Number(bookingId) },
-      data: { status: "APPROVED" },
-      include: { user: true, facility: true, bookingType: true }
-    });
-
-    await tx.bookingHistory.create({
-      data: {
-        bookingId: approved.id,
-        oldStatus: "PENDING",
-        newStatus: "APPROVED",
-        changeReason: "Admin approved",
-        previousFacilityId: approved.facilityId,
-        changedById: adminId
-      }
-    });
-
-    // 2) Nếu FE không gửi victims thì BE tự tìm victims (PENDING trùng giờ cùng phòng)
-    let victims = rejectedBookingIds;
-    if (!victims || victims.length === 0) {
-      const pendingConflicts = await tx.booking.findMany({
-        where: {
-          id: { not: approved.id },
-          facilityId: approved.facilityId,
-          status: "PENDING",
-          startTime: { lt: approved.endTime },
-          endTime: { gt: approved.startTime }
-        },
-        select: { id: true }
-      });
-      victims = pendingConflicts.map(x => x.id);
-    }
-
-    // 3) Reject victims + log
-    if (victims.length > 0) {
-      await tx.booking.updateMany({
-        where: { id: { in: victims } },
-        data: { status: "REJECTED" }
+  async approveWithAutoRejection({
+    bookingId,
+    adminId,
+    rejectedBookingIds = [],
+  }) {
+    return this.prisma.$transaction(async (tx) => {
+      // 1) Approve đơn chính
+      const approved = await tx.booking.update({
+        where: { id: Number(bookingId) },
+        data: { status: "APPROVED" },
+        include: { user: true, facility: true, bookingType: true },
       });
 
-      await tx.bookingHistory.createMany({
-        data: victims.map((id) => ({
-          bookingId: id,
+      await tx.bookingHistory.create({
+        data: {
+          bookingId: approved.id,
           oldStatus: "PENDING",
-          newStatus: "REJECTED",
-          changeReason: `Auto rejected do trùng lịch với booking đã được duyệt (#${approved.id}).`,
-          changedById: adminId
-        }))
+          newStatus: "APPROVED",
+          changeReason: "Admin approved",
+          previousFacilityId: approved.facilityId,
+          changedById: adminId,
+        },
       });
-    }
 
-    return { approved, rejectedIds: victims };
-  });
-}
+      // 2) Nếu FE không gửi victims thì BE tự tìm victims (PENDING trùng giờ cùng phòng)
+      let victims = rejectedBookingIds;
+      if (!victims || victims.length === 0) {
+        const pendingConflicts = await tx.booking.findMany({
+          where: {
+            id: { not: approved.id },
+            facilityId: approved.facilityId,
+            status: "PENDING",
+            startTime: { lt: approved.endTime },
+            endTime: { gt: approved.startTime },
+          },
+          select: { id: true },
+        });
+        victims = pendingConflicts.map((x) => x.id);
+      }
 
+      // 3) Reject victims + log
+      if (victims.length > 0) {
+        await tx.booking.updateMany({
+          where: { id: { in: victims } },
+          data: { status: "REJECTED" },
+        });
+
+        await tx.bookingHistory.createMany({
+          data: victims.map((id) => ({
+            bookingId: id,
+            oldStatus: "PENDING",
+            newStatus: "REJECTED",
+            changeReason: `Auto rejected do trùng lịch với booking đã được duyệt (#${approved.id}).`,
+            changedById: adminId,
+          })),
+        });
+      }
+
+      return { approved, rejectedIds: victims };
+    });
+  }
 
   async reject(bookingId, adminId, reason) {
     return this.prisma.$transaction(async (tx) => {
       const booking = await tx.booking.update({
         where: { id: bookingId },
-        data: { status: 'REJECTED' },
-        include: { user: true, facility: true }
+        data: { status: "REJECTED" },
+        include: { user: true, facility: true },
       });
 
       await tx.bookingHistory.create({
         data: {
           bookingId,
-          oldStatus: 'PENDING',
-          newStatus: 'REJECTED',
+          oldStatus: "PENDING",
+          newStatus: "REJECTED",
           changeReason: reason,
-          changedById: adminId
-        }
+          changedById: adminId,
+        },
       });
       return booking;
     });
@@ -223,14 +242,14 @@ async approveWithAutoRejection({ bookingId, adminId, rejectedBookingIds = [] }) 
     return this.prisma.booking.findMany({
       where: {
         facilityId,
-        status: { in: ['APPROVED', 'PENDING'] },
+        status: { in: ["APPROVED", "PENDING"] },
         startTime: { lt: endTime },
-        endTime: { gt: startTime }
+        endTime: { gt: startTime },
       },
       include: {
-        bookingType: true
-      }
-    })
+        bookingType: true,
+      },
+    });
   }
 
   async create(data) {
@@ -243,23 +262,23 @@ async approveWithAutoRejection({ bookingId, adminId, rejectedBookingIds = [] }) 
         endTime: data.endTime,
         status: data.status,
         attendeeCount: data.attendeeCount,
-      }
-    })
+      },
+    });
   }
 
   async getUserConflictingBookings(userId, startTime, endTime) {
     return this.prisma.booking.findMany({
       where: {
         userId: Number(userId),
-        status: { in: ['APPROVED', 'PENDING'] },
+        status: { in: ["APPROVED", "PENDING"] },
         startTime: { lt: endTime },
-        endTime: { gt: startTime }
+        endTime: { gt: startTime },
       },
       include: {
         facility: {
-          select: { name: true }
-        }
-      }
+          select: { name: true },
+        },
+      },
     });
   }
 
@@ -271,12 +290,19 @@ async approveWithAutoRejection({ bookingId, adminId, rejectedBookingIds = [] }) 
    * - If created booking is APPROVED -> write history (optional but helpful)
    * - Return { createdBooking, cancelledBookings } for sending emails
    */
-  async preemptAndCreate(bookingsToCancelIds, newBookingData, reason, options = {}) {
+  async preemptAndCreate(
+    bookingsToCancelIds,
+    newBookingData,
+    reason,
+    options = {}
+  ) {
     const { isAdmin = false, changedById } = options;
 
     // ✅ changedById bắt buộc theo schema
     if (!changedById || Number.isNaN(Number(changedById))) {
-      throw new Error("preemptAndCreate: changedById is required (BookingHistory.changedById).");
+      throw new Error(
+        "preemptAndCreate: changedById is required (BookingHistory.changedById)."
+      );
     }
 
     return this.prisma.$transaction(async (tx) => {
@@ -289,37 +315,37 @@ async approveWithAutoRejection({ bookingId, adminId, rejectedBookingIds = [] }) 
           include: {
             user: { select: { id: true, email: true, fullName: true } },
             facility: { select: { id: true, name: true } },
-            bookingType: { select: { id: true, name: true } }
-          }
+            bookingType: { select: { id: true, name: true } },
+          },
         });
 
         // 2) Chỉ cancel những booking đang APPROVED (đúng yêu cầu)
         await tx.booking.updateMany({
           where: {
             id: { in: bookingsToCancelIds },
-            status: 'APPROVED'
+            status: { in: ["APPROVED", "PENDING"] },
           },
-          data: { status: 'CANCELLED' }
+          data: { status: "CANCELLED" },
         });
 
         // 3) History cho victims (chỉ log cái thật sự là APPROVED)
-        const victimHistory = cancelledBookings
-          .filter(b => b.status === 'APPROVED')
-          .map(b => ({
-            bookingId: b.id,
-            oldStatus: 'APPROVED',
-            newStatus: 'CANCELLED',
-            changeReason: reason || (isAdmin ? 'Admin override' : 'Preempted by higher priority'),
-            previousFacilityId: b.facilityId,
-            changedById: Number(changedById)
-          }));
+        const victimHistory = cancelledBookings.map((b) => ({
+          bookingId: b.id,
+          oldStatus: b.status,
+          newStatus: "CANCELLED",
+          changeReason: reason || "Admin override",
+          previousFacilityId: b.facilityId,
+          changedById: Number(changedById),
+        }));
 
         if (victimHistory.length > 0) {
           await tx.bookingHistory.createMany({ data: victimHistory });
         }
 
         // chỉ trả victims thực sự bị hủy
-        cancelledBookings = cancelledBookings.filter(b => b.status === 'APPROVED');
+        cancelledBookings = cancelledBookings.filter(
+          (b) => b.status === "APPROVED"
+        );
       }
 
       // 4) Create booking mới
@@ -331,26 +357,26 @@ async approveWithAutoRejection({ bookingId, adminId, rejectedBookingIds = [] }) 
           startTime: newBookingData.startTime,
           endTime: newBookingData.endTime,
           status: newBookingData.status,
-          attendeeCount: newBookingData.attendeeCount
+          attendeeCount: newBookingData.attendeeCount,
         },
         include: {
           user: { select: { id: true, email: true, fullName: true } },
           facility: { select: { id: true, name: true } },
-          bookingType: true
-        }
+          bookingType: true,
+        },
       });
 
       // 5) Log history cho booking mới nếu auto-approved
-      if (createdBooking.status === 'APPROVED') {
+      if (createdBooking.status === "APPROVED") {
         await tx.bookingHistory.create({
           data: {
             bookingId: createdBooking.id,
-            oldStatus: 'PENDING',
-            newStatus: 'APPROVED',
-            changeReason: 'Admin created booking (auto-approved)',
+            oldStatus: "PENDING",
+            newStatus: "APPROVED",
+            changeReason: "Admin created booking (auto-approved)",
             previousFacilityId: createdBooking.facilityId,
-            changedById: Number(changedById)
-          }
+            changedById: Number(changedById),
+          },
         });
       }
 
@@ -358,74 +384,79 @@ async approveWithAutoRejection({ bookingId, adminId, rejectedBookingIds = [] }) 
     });
   }
   // ✅ Tạo đơn mới rồi HUỶ ngay (để history hiển thị "Đã hủy")
-async createAndCancelNew(newBookingData, reason) {
-  return this.prisma.$transaction(async (tx) => {
-    // 1) tạo PENDING trước
-    const created = await tx.booking.create({
-      data: {
-        userId: newBookingData.userId,
-        facilityId: newBookingData.facilityId,
-        bookingTypeId: newBookingData.bookingTypeId,
-        startTime: newBookingData.startTime,
-        endTime: newBookingData.endTime,
-        status: 'PENDING',
-        attendeeCount: newBookingData.attendeeCount
-      },
-      include: {
-        user: { select: { id: true, email: true, fullName: true } },
-        facility: { select: { id: true, name: true } },
-        bookingType: true
-      }
+  async createAndCancelNew(newBookingData, reason) {
+    return this.prisma.$transaction(async (tx) => {
+      // 1) tạo PENDING trước
+      const created = await tx.booking.create({
+        data: {
+          userId: newBookingData.userId,
+          facilityId: newBookingData.facilityId,
+          bookingTypeId: newBookingData.bookingTypeId,
+          startTime: newBookingData.startTime,
+          endTime: newBookingData.endTime,
+          status: "PENDING",
+          attendeeCount: newBookingData.attendeeCount,
+        },
+        include: {
+          user: { select: { id: true, email: true, fullName: true } },
+          facility: { select: { id: true, name: true } },
+          bookingType: true,
+        },
+      });
+
+      // 2) update sang CANCELLED
+      const cancelled = await tx.booking.update({
+        where: { id: created.id },
+        data: { status: "CANCELLED" },
+        include: {
+          user: { select: { id: true, email: true, fullName: true } },
+          facility: { select: { id: true, name: true } },
+          bookingType: true,
+        },
+      });
+
+      // 3) log history
+      await tx.bookingHistory.create({
+        data: {
+          bookingId: created.id,
+          oldStatus: "PENDING",
+          newStatus: "CANCELLED",
+          changeReason: reason || "Bị hủy do trùng lịch đã được duyệt trước đó",
+          previousFacilityId: newBookingData.facilityId,
+          changedById: newBookingData.userId,
+        },
+      });
+
+      return cancelled;
     });
+  }
 
-    // 2) update sang CANCELLED
-    const cancelled = await tx.booking.update({
-      where: { id: created.id },
-      data: { status: 'CANCELLED' },
-      include: {
-        user: { select: { id: true, email: true, fullName: true } },
-        facility: { select: { id: true, name: true } },
-        bookingType: true
-      }
-    });
-
-    // 3) log history
-    await tx.bookingHistory.create({
-      data: {
-        bookingId: created.id,
-        oldStatus: 'PENDING',
-        newStatus: 'CANCELLED',
-        changeReason: reason || 'Bị hủy do trùng lịch đã được duyệt trước đó',
-        previousFacilityId: newBookingData.facilityId,
-        changedById: newBookingData.userId
-      }
-    });
-
-    return cancelled;
-  });
-}
-
-
-  async relocateBooking({ bookingId, toFacilityId, reason, maintenanceLogId, changedBy }) {
+  async relocateBooking({
+    bookingId,
+    toFacilityId,
+    reason,
+    maintenanceLogId,
+    changedBy,
+  }) {
     return this.prisma.$transaction(async (tx) => {
       const booking = await tx.booking.findUnique({ where: { id: bookingId } });
 
       const updated = await tx.booking.update({
         where: { id: bookingId },
         data: { facilityId: toFacilityId },
-        include: { facility: true, user: true }
+        include: { facility: true, user: true },
       });
 
       // ✅ FIX: schema dùng changedById, không phải changedBy connect
       await tx.bookingHistory.create({
         data: {
           bookingId: bookingId,
-          oldStatus: 'APPROVED',
-          newStatus: 'APPROVED',
+          oldStatus: "APPROVED",
+          newStatus: "APPROVED",
           changeReason: reason,
           previousFacilityId: booking.facilityId,
-          changedById: changedBy
-        }
+          changedById: changedBy,
+        },
       });
 
       return updated;
@@ -436,23 +467,23 @@ async createAndCancelNew(newBookingData, reason) {
     return this.prisma.$transaction(async (tx) => {
       const old = await tx.booking.findUnique({
         where: { id: bookingId },
-        select: { status: true, facilityId: true }
+        select: { status: true, facilityId: true },
       });
 
       const updated = await tx.booking.update({
         where: { id: bookingId },
-        data: { status: 'CANCELLED' }
+        data: { status: "CANCELLED" },
       });
 
       await tx.bookingHistory.create({
         data: {
           bookingId: bookingId,
-          oldStatus: old?.status || 'APPROVED',
-          newStatus: 'CANCELLED',
+          oldStatus: old?.status || "APPROVED",
+          newStatus: "CANCELLED",
           changeReason: reason,
           previousFacilityId: updated.facilityId,
-          changedById: changedBy
-        }
+          changedById: changedBy,
+        },
       });
       return updated;
     });
@@ -462,8 +493,8 @@ async createAndCancelNew(newBookingData, reason) {
     return this.prisma.booking.findMany({
       where: {
         facility: {
-          campusId: Number(campusId)
-        }
+          campusId: Number(campusId),
+        },
       },
       include: {
         user: {
@@ -471,20 +502,20 @@ async createAndCancelNew(newBookingData, reason) {
             id: true,
             email: true,
             fullName: true,
-            role: true
-          }
+            role: true,
+          },
         },
         facility: {
           include: {
             type: true,
-            campus: true
-          }
+            campus: true,
+          },
         },
-        bookingType: true
+        bookingType: true,
       },
       orderBy: {
-        createdAt: 'desc'
-      }
+        createdAt: "desc",
+      },
     });
   }
 
@@ -493,36 +524,43 @@ async createAndCancelNew(newBookingData, reason) {
       where: {
         bookings: {
           some: {
-            status: 'PENDING',
-            facility: { campusId: Number(campusId) }
-          }
-        }
+            status: "PENDING",
+            facility: { campusId: Number(campusId) },
+          },
+        },
       },
       include: {
-        createdBy: { select: { id: true, fullName: true, email: true, role: true } },
+        createdBy: {
+          select: { id: true, fullName: true, email: true, role: true },
+        },
         bookings: {
-          include: { facility: true, bookingType: true }
-        }
+          include: { facility: true, bookingType: true },
+        },
       },
-      orderBy: { createdAt: 'asc' }
+      orderBy: { createdAt: "asc" },
     });
 
     const singleBookings = await this.prisma.booking.findMany({
       where: {
         bookingGroupId: null,
-        status: 'PENDING',
-        facility: { campusId: Number(campusId) }
+        status: "PENDING",
+        facility: { campusId: Number(campusId) },
       },
       include: {
         user: { select: { id: true, fullName: true, email: true, role: true } },
         facility: { include: { type: true, campus: true } },
-        bookingType: true
+        bookingType: true,
       },
-      orderBy: { createdAt: 'asc' }
+      orderBy: { createdAt: "asc" },
     });
 
-    const formattedGroups = groups.map(g => this._formatGroupSummary(g)).filter(g => g !== null);
-    const formattedSingles = singleBookings.map(b => ({ ...b, isGroup: false }));
+    const formattedGroups = groups
+      .map((g) => this._formatGroupSummary(g))
+      .filter((g) => g !== null);
+    const formattedSingles = singleBookings.map((b) => ({
+      ...b,
+      isGroup: false,
+    }));
 
     return [...formattedGroups, ...formattedSingles];
   }
@@ -530,10 +568,10 @@ async createAndCancelNew(newBookingData, reason) {
   async findConflictsByCampus(campusId) {
     const bookings = await this.prisma.booking.findMany({
       where: {
-        status: { in: ['APPROVED', 'PENDING'] },
+        status: { in: ["APPROVED", "PENDING"] },
         facility: {
-          campusId: Number(campusId)
-        }
+          campusId: Number(campusId),
+        },
       },
       include: {
         user: {
@@ -541,20 +579,20 @@ async createAndCancelNew(newBookingData, reason) {
             id: true,
             email: true,
             fullName: true,
-            role: true
-          }
+            role: true,
+          },
         },
         facility: {
           include: {
             type: true,
-            campus: true
-          }
+            campus: true,
+          },
         },
-        bookingType: true
+        bookingType: true,
       },
       orderBy: {
-        startTime: 'asc'
-      }
+        startTime: "asc",
+      },
     });
 
     const conflicts = [];
@@ -574,9 +612,10 @@ async createAndCancelNew(newBookingData, reason) {
               booking1,
               booking2,
               facility: booking1.facility,
-              conflictType: booking1.status === 'APPROVED' && booking2.status === 'APPROVED'
-                ? 'APPROVED_CONFLICT'
-                : 'PENDING_CONFLICT'
+              conflictType:
+                booking1.status === "APPROVED" && booking2.status === "APPROVED"
+                  ? "APPROVED_CONFLICT"
+                  : "PENDING_CONFLICT",
             });
           }
         }
@@ -587,19 +626,21 @@ async createAndCancelNew(newBookingData, reason) {
   }
 
   async searchForGuard(campusId, keyword) {
-    const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(); endOfDay.setHours(23, 59, 59, 999);
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date();
+    endOfDay.setHours(23, 59, 59, 999);
 
     const where = {
       user: { campusId: Number(campusId) },
-      status: 'APPROVED',
-      startTime: { gte: startOfDay, lte: endOfDay }
+      status: "APPROVED",
+      startTime: { gte: startOfDay, lte: endOfDay },
     };
 
     if (keyword) {
       where.OR = [
-        { user: { fullName: { contains: keyword, mode: 'insensitive' } } },
-        { user: { email: { contains: keyword, mode: 'insensitive' } } }
+        { user: { fullName: { contains: keyword, mode: "insensitive" } } },
+        { user: { email: { contains: keyword, mode: "insensitive" } } },
       ];
       if (!isNaN(keyword)) where.OR.push({ id: Number(keyword) });
     }
@@ -608,9 +649,9 @@ async createAndCancelNew(newBookingData, reason) {
       where,
       include: {
         user: { select: { fullName: true, email: true } },
-        facility: { select: { name: true } }
+        facility: { select: { name: true } },
       },
-      orderBy: { startTime: 'asc' }
+      orderBy: { startTime: "asc" },
     });
   }
 
@@ -618,18 +659,18 @@ async createAndCancelNew(newBookingData, reason) {
     return this.prisma.$transaction(async (tx) => {
       const updated = await tx.booking.update({
         where: { id: bookingId },
-        data: { isCheckedIn: true }
+        data: { isCheckedIn: true },
       });
 
       await tx.bookingHistory.create({
         data: {
           bookingId,
-          oldStatus: 'APPROVED',
-          newStatus: 'APPROVED',
-          changeReason: 'Guard Check-in (Open Door)',
+          oldStatus: "APPROVED",
+          newStatus: "APPROVED",
+          changeReason: "Guard Check-in (Open Door)",
           previousFacilityId: updated.facilityId,
-          changedById: guardId
-        }
+          changedById: guardId,
+        },
       });
       return updated;
     });
@@ -639,18 +680,18 @@ async createAndCancelNew(newBookingData, reason) {
     return this.prisma.$transaction(async (tx) => {
       const updated = await tx.booking.update({
         where: { id: bookingId },
-        data: { status: 'COMPLETED' }
+        data: { status: "COMPLETED" },
       });
 
       await tx.bookingHistory.create({
         data: {
           bookingId,
-          oldStatus: 'APPROVED',
-          newStatus: 'COMPLETED',
-          changeReason: 'Guard Check-out (Close Door)',
+          oldStatus: "APPROVED",
+          newStatus: "COMPLETED",
+          changeReason: "Guard Check-out (Close Door)",
           previousFacilityId: updated.facilityId,
-          changedById: guardId
-        }
+          changedById: guardId,
+        },
       });
       return updated;
     });
@@ -661,27 +702,29 @@ async createAndCancelNew(newBookingData, reason) {
       where: { createdById: Number(userId) },
       include: {
         bookings: {
-          include: { facility: { select: { name: true } }, bookingType: true }
+          include: { facility: { select: { name: true } }, bookingType: true },
         },
-        createdBy: { select: { fullName: true } }
+        createdBy: { select: { fullName: true } },
       },
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: "desc" },
     });
 
     const singles = await this.prisma.booking.findMany({
       where: {
         userId: Number(userId),
-        bookingGroupId: null
+        bookingGroupId: null,
       },
       include: {
         facility: { select: { name: true, imageUrls: true } },
         bookingType: true,
       },
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: "desc" },
     });
 
-    const formattedGroups = groups.map(g => this._formatGroupSummary(g)).filter(g => g !== null);
-    const formattedSingles = singles.map(b => ({ ...b, isGroup: false }));
+    const formattedGroups = groups
+      .map((g) => this._formatGroupSummary(g))
+      .filter((g) => g !== null);
+    const formattedSingles = singles.map((b) => ({ ...b, isGroup: false }));
 
     return [...formattedGroups, ...formattedSingles].sort((a, b) => {
       const timeA = a.createdAt ? new Date(a.createdAt) : new Date(a.startDate);
@@ -697,12 +740,12 @@ async createAndCancelNew(newBookingData, reason) {
         bookings: {
           include: {
             facility: { select: { id: true, name: true, type: true } },
-            bookingType: true
+            bookingType: true,
           },
-          orderBy: { startTime: 'asc' }
+          orderBy: { startTime: "asc" },
         },
-        createdBy: { select: { id: true, fullName: true, email: true } }
-      }
+        createdBy: { select: { id: true, fullName: true, email: true } },
+      },
     });
   }
 
@@ -711,23 +754,23 @@ async createAndCancelNew(newBookingData, reason) {
       // ✅ FIX: lấy status cũ trước khi update
       const old = await tx.booking.findUnique({
         where: { id: bookingId },
-        select: { status: true, facilityId: true }
+        select: { status: true, facilityId: true },
       });
 
       const updated = await tx.booking.update({
         where: { id: bookingId },
-        data: { status: 'CANCELLED' }
+        data: { status: "CANCELLED" },
       });
 
       await tx.bookingHistory.create({
         data: {
           bookingId,
-          oldStatus: old?.status || 'PENDING',
-          newStatus: 'CANCELLED',
-          changeReason: reason || 'User self-cancellation',
+          oldStatus: old?.status || "PENDING",
+          newStatus: "CANCELLED",
+          changeReason: reason || "User self-cancellation",
           previousFacilityId: old?.facilityId,
-          changedById: userId
-        }
+          changedById: userId,
+        },
       });
       return updated;
     });
@@ -770,22 +813,22 @@ async createAndCancelNew(newBookingData, reason) {
           description: groupData.note || groupData.description,
           createdById: groupData.userId,
           totalSlots: bookingsData.length,
-        }
+        },
       });
 
-      const bookingsToCreate = bookingsData.map(b => ({
+      const bookingsToCreate = bookingsData.map((b) => ({
         userId: groupData.userId,
         facilityId: b.facilityId,
         bookingTypeId: b.bookingTypeId,
         startTime: b.startTime,
         endTime: b.endTime,
         bookingGroupId: group.id,
-        status: 'PENDING',
-        attendeeCount: b.attendeeCount
+        status: "PENDING",
+        attendeeCount: b.attendeeCount,
       }));
 
       await tx.booking.createMany({
-        data: bookingsToCreate
+        data: bookingsToCreate,
       });
 
       return group;
@@ -796,10 +839,10 @@ async createAndCancelNew(newBookingData, reason) {
     const conflictBooking = await this.prisma.booking.findFirst({
       where: {
         facilityId: Number(facilityId),
-        status: { in: ['APPROVED', 'PENDING'] },
+        status: { in: ["APPROVED", "PENDING"] },
         startTime: { lt: endTime },
-        endTime: { gt: startTime }
-      }
+        endTime: { gt: startTime },
+      },
     });
     if (conflictBooking) return false;
 
@@ -807,8 +850,8 @@ async createAndCancelNew(newBookingData, reason) {
       where: {
         facilityId: Number(facilityId),
         startDate: { lt: endTime },
-        OR: [{ endDate: { gt: startTime } }, { endDate: null }]
-      }
+        OR: [{ endDate: { gt: startTime } }, { endDate: null }],
+      },
     });
     if (conflictMaintenance) return false;
 
@@ -817,40 +860,46 @@ async createAndCancelNew(newBookingData, reason) {
 
   async countBookingsByStatus(campusId, startDate, endDate) {
     return this.prisma.booking.groupBy({
-      by: ['status'],
+      by: ["status"],
       where: {
         facility: { campusId: Number(campusId) },
-        startTime: { gte: startDate, lte: endDate }
+        startTime: { gte: startDate, lte: endDate },
       },
-      _count: { id: true }
+      _count: { id: true },
     });
   }
 
   async getTopFacilities(campusId, startDate, endDate, limit = 5) {
     const result = await this.prisma.booking.groupBy({
-      by: ['facilityId'],
+      by: ["facilityId"],
       where: {
         facility: { campusId: Number(campusId) },
-        status: 'APPROVED',
-        startTime: { gte: startDate, lte: endDate }
+        status: "APPROVED",
+        startTime: { gte: startDate, lte: endDate },
       },
       _count: { id: true },
-      orderBy: { _count: { id: 'desc' } },
-      take: limit
+      orderBy: { _count: { id: "desc" } },
+      take: limit,
     });
 
-    const enrichedResult = await Promise.all(result.map(async (item) => {
-      const facility = await this.prisma.facility.findUnique({
-        where: { id: item.facilityId },
-        select: { name: true, capacity: true, type: { select: { name: true } } }
-      });
-      return {
-        ...item,
-        facilityName: facility.name,
-        facilityType: facility.type.name,
-        count: item._count.id
-      };
-    }));
+    const enrichedResult = await Promise.all(
+      result.map(async (item) => {
+        const facility = await this.prisma.facility.findUnique({
+          where: { id: item.facilityId },
+          select: {
+            name: true,
+            capacity: true,
+            type: { select: { name: true } },
+          },
+        });
+        return {
+          ...item,
+          facilityName: facility.name,
+          facilityType: facility.type.name,
+          count: item._count.id,
+        };
+      })
+    );
 
     return enrichedResult;
   }
@@ -859,15 +908,15 @@ async createAndCancelNew(newBookingData, reason) {
     return this.prisma.booking.findMany({
       where: {
         facility: { campusId: Number(campusId) },
-        startTime: { gte: startDate, lte: endDate }
+        startTime: { gte: startDate, lte: endDate },
       },
-      select: { startTime: true, status: true }
+      select: { startTime: true, status: true },
     });
   }
 
   async countTotalFacilities(campusId) {
     return this.prisma.facility.count({
-      where: { campusId: Number(campusId), status: 'ACTIVE' }
+      where: { campusId: Number(campusId), status: "ACTIVE" },
     });
   }
 
@@ -875,31 +924,31 @@ async createAndCancelNew(newBookingData, reason) {
     const bookings = await this.prisma.booking.findMany({
       where: {
         facilityId: Number(facilityId),
-        status: { in: ['APPROVED', 'PENDING'] },
+        status: { in: ["APPROVED", "PENDING"] },
         startTime: { lt: endOfDay },
-        endTime: { gt: startOfDay }
+        endTime: { gt: startOfDay },
       },
       select: {
         id: true,
         startTime: true,
         endTime: true,
         status: true,
-        userId: true
-      }
+        userId: true,
+      },
     });
 
     const maintenance = await this.prisma.maintenanceLog.findMany({
       where: {
         facilityId: Number(facilityId),
         startDate: { lt: endOfDay },
-        OR: [{ endDate: { gt: startOfDay } }, { endDate: null }]
+        OR: [{ endDate: { gt: startOfDay } }, { endDate: null }],
       },
       select: {
         id: true,
         startDate: true,
         endDate: true,
-        reason: true
-      }
+        reason: true,
+      },
     });
 
     return { bookings, maintenance };
@@ -908,4 +957,4 @@ async createAndCancelNew(newBookingData, reason) {
 
 }
 
-module.exports = PrismaBookingRepository
+module.exports = PrismaBookingRepository;
