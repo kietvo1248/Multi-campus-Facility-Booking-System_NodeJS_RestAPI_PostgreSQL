@@ -99,7 +99,10 @@ class PrismaUserRepository extends IUserRepository {
 
         const users = await this.prisma.user.findMany({
             where,
-            include: { campus: true },
+            select: { // Thay include bằng select hoặc dùng exclude
+                id: true, fullName: true, email: true, 
+                role: true, campus: true, isActive: true 
+            },
             skip,
             take: Number(limit),
             orderBy: { id: 'desc' }

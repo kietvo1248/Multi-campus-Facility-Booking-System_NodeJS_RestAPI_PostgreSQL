@@ -228,7 +228,10 @@ async approve(req, res) {
       const { reason } = req.body;
       const adminId = req.user.id;
 
-      const result = await this.bookingRepository.reject(parseInt(bookingId), adminId, reason);
+      const bId = parseInt(bookingId);
+      if (isNaN(bId)) return res.status(400).json({ message: "Booking ID không hợp lệ" });
+
+      const result = await this.bookingRepository.reject(bId, adminId, reason);
 
       if (result.user && result.user.email) {
         const bookingDetails = {
