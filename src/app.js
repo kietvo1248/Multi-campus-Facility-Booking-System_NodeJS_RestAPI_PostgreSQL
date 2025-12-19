@@ -58,7 +58,7 @@ const ListUsers = require('./application/users/ListUsers');
 const ToggleUserStatus = require('./application/users/ToggleUserStatus');
 
 const loginUserUseCase = new LoginUser(userRepository);
-const viewUserProfileUseCase = new ViewUserProfile(userRepository);
+const viewUserProfileUseCase = new ViewUserProfile(userRepository, clubRepository);
 const loginGoogleUserUseCase = new LoginGoogleUser(userRepository);
 const updateProfileUseCase = new UpdateUserProfile(userRepository);
 const updatePasswordUseCase = new UpdateUserPassword(userRepository);
