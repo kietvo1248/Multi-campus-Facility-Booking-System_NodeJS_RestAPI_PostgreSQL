@@ -120,6 +120,63 @@ class BookingController {
       return res.status(400).json({ message: error.message });
     }
   }
+  // POST /bookings/:id/reschedule-request
+async requestReschedule(req, res) {
+  try {
+    const oldBookingId = Number(req.params.id);
+    const userId = req.user.id;
+    const userRole = String(req.user.role || '').toUpperCase();
+
+    // Chỉ lecturer (tuỳ bạn có cho student không)
+    if (!['LECTURER'].includes(userRole)) {
+      return res.status(403).json({ message: 'Chỉ LECTURER mới được yêu cầu đổi lịch.' });
+    }
+
+    const { facilityId, date, slots, bookingTypeId, attendeeCount } = req.body;
+
+    if (!facilityId || !date || !slots || !Array.isArray(slots) || slots.length === 0) {
+      return res.status(400).json({ message: 'Thiếu facilityId/date/slots.' });
+    }
+
+    // 1) Lấy booking cũ
+    const oldBooking = await this.bookingRepository.findById(oldBookingId);
+    if (!oldBooking) return res.status(404).json({ message: 'Booking gốc không tồn tại.' });
+
+    // 2) Chỉ chủ booking mới được đổi
+    if (oldBooking.userId !== userId) {
+      return res.status(403).json({ message: 'Bạn không có quyền đổi lịch booking này.' });
+    }
+
+    // 3) Cho phép đổi lịch nếu booking APPROVED hoặc bị CANCELLED do admin đặt đè (tuỳ rule)
+const st = String(oldBooking?.status ?? "").trim().toUpperCase();
+
+const allowed = ["APPROVED", "CANCELLED"]; // bạn có thể thêm "CONFLICT" nếu hệ thống dùng status này
+if (!allowed.includes(st)) {
+  return res.status(400).json({
+    message: `Booking status (${st || "UNKNOWN"}) không hợp lệ để yêu cầu đổi lịch.`,
+  });
+}
+
+    // 4) Tạo booking mới PENDING + rescheduleFromId
+    const newBooking = await this.bookingRepository.createRescheduleRequest({
+      userId,
+      facilityId: Number(facilityId),
+      date,
+      slots,
+      bookingTypeId: Number(bookingTypeId),
+      attendeeCount: Number(attendeeCount),
+      rescheduleFromId: oldBookingId,
+    });
+
+    return res.status(201).json({
+      message: 'Tạo yêu cầu đổi lịch thành công (chờ duyệt).',
+      data: newBooking,
+    });
+  } catch (error) {
+    return res.status(400).json({ message: error.message });
+  }
+}
+
 
   async suggestForClub(req, res) {
     try {
@@ -190,11 +247,7 @@ class BookingController {
 
 async approve(req, res) {
   try {
-    const rawId =
-      req.params?.bookingId ??
-      req.params?.id ??
-      req.query?.bookingId; // bonus: nếu sau này FE gửi query
-
+    const rawId = req.params?.bookingId ?? req.params?.id ?? req.query?.bookingId;
     const bookingId = Number(rawId);
 
     if (!bookingId || Number.isNaN(bookingId)) {
@@ -203,23 +256,16 @@ async approve(req, res) {
 
     const adminId = req.user.id;
 
-    const body = req.body || {};
-    const rejectedBookingIds = Array.isArray(body.rejectedBookingIds)
-      ? body.rejectedBookingIds
-      : [];
-
-    const result = await this.bookingRepository.approveWithAutoRejection({
-      bookingId,
-      adminId,
-      rejectedBookingIds,
-    });
+    // ✅ dùng use-case ApproveBooking
+    const result = await this.approveBooking.execute(bookingId, adminId);
 
     return res.json({ success: true, data: result });
   } catch (error) {
-    console.error("Approve error:", error);
-    return res.status(500).json({ error: error.message });
+    // lỗi nghiệp vụ thì trả 400 cho FE dễ xử lý
+    return res.status(400).json({ message: error.message });
   }
 }
+
 
 
   async reject(req, res) {
@@ -309,16 +355,16 @@ async approve(req, res) {
         if (!result) return res.status(404).json({ message: 'Nhóm đặt phòng không tồn tại.' });
 
         // ✅ FIX role: schema không có CAMPUS_ADMIN
-        if (result.userId !== userId && !['ADMIN', 'FACILITY_ADMIN'].includes(role)) {
-          return res.status(403).json({ message: 'Không có quyền truy cập.' });
-        }
+       if (result.createdById !== userId && !['ADMIN', 'FACILITY_ADMIN'].includes(role)) {
+  return res.status(403).json({ message: 'Không có quyền truy cập.' });
+}
       } else {
         result = await this.bookingRepository.findById(id);
         if (!result) return res.status(404).json({ message: 'Booking không tồn tại.' });
 
-        if (result.userId !== userId && !['ADMIN', 'FACILITY_ADMIN'].includes(role)) {
-          return res.status(403).json({ message: 'Không có quyền truy cập.' });
-        }
+     if (result.userId !== userId && !['ADMIN', 'FACILITY_ADMIN'].includes(role)) {
+  return res.status(403).json({ message: 'Không có quyền truy cập.' });
+}
       }
 
       return res.status(200).json(result);
@@ -346,7 +392,7 @@ async approve(req, res) {
       const adminId = req.user.id; // Lấy từ token
 
       // 1. Gọi Use Case (Thay vì gọi repo trực tiếp)
-      const result = await this.cancelBookingByAdminUseCase.execute({
+     const result = await this.cancelBookingByAdmin.execute({
         bookingId,
         adminId,
         reason

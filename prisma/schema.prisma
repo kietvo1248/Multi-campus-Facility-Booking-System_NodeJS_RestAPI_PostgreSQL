@@ -255,6 +255,11 @@ model Booking {
   bookingGroupId Int?
   bookingTypeId  Int
 
+  // ✅ NEW: Booking này là "đổi lịch từ booking nào"
+  rescheduleFromId Int?
+  rescheduleFrom   Booking? @relation("BookingReschedule", fields: [rescheduleFromId], references: [id], onDelete: SetNull)
+  rescheduledTo    Booking[] @relation("BookingReschedule")
+
   user         User          @relation(fields: [userId], references: [id])
   facility     Facility      @relation(fields: [facilityId], references: [id])
   group        BookingGroup? @relation(fields: [bookingGroupId], references: [id])
@@ -266,8 +271,10 @@ model Booking {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([rescheduleFromId])
   @@map("bookings")
 }
+
 
 model BookingHistory {
   id                 Int           @id @default(autoincrement())
