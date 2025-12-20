@@ -4,6 +4,21 @@ class PrismaBookingRepository {
   constructor(prisma) {
     this.prisma = prisma;
   }
+  slotTimeMap(slot) {
+  const map = {
+    1: { start: '07:00', end: '09:00' },
+    2: { start: '09:00', end: '11:00' },
+    3: { start: '11:00', end: '13:00' },
+    4: { start: '13:00', end: '15:00' },
+    5: { start: '15:00', end: '17:00' }
+  };
+  return map[slot];
+}
+
+buildTime(dateISO, hhmm) {
+  return new Date(`${dateISO}T${hhmm}:00+07:00`);
+}
+
 
   //Helper:
   _formatGroupSummary(group) {
@@ -114,6 +129,38 @@ class PrismaBookingRepository {
     }
     return null;
   }
+  async createRescheduleRequest({
+  userId,
+  facilityId,
+  date,
+  slots,
+  bookingTypeId,
+  attendeeCount,
+  rescheduleFromId,
+}) {
+  const sortedSlots = [...slots].sort((a, b) => a - b);
+  const first = this.slotTimeMap(sortedSlots[0]);
+  const last = this.slotTimeMap(sortedSlots[sortedSlots.length - 1]);
+  if (!first || !last) throw new Error("Slot không hợp lệ.");
+
+  const startTime = this.buildTime(date, first.start);
+  const endTime = this.buildTime(date, last.end);
+
+  return this.prisma.booking.create({
+    data: {
+      userId: Number(userId),
+      facilityId: Number(facilityId),
+      bookingTypeId: Number(bookingTypeId),
+      startTime,
+      endTime,
+      status: "PENDING",
+      attendeeCount: attendeeCount ? Number(attendeeCount) : null,
+      rescheduleFromId: Number(rescheduleFromId),
+    },
+    include: { user: true, facility: true, bookingType: true },
+  });
+}
+
 
   async findPendingConflicts(facilityId, startTime, endTime, excludeBookingId) {
     return this.prisma.booking.findMany({
@@ -216,6 +263,140 @@ class PrismaBookingRepository {
       return { approved, rejectedIds: victims };
     });
   }
+ async approveRescheduleWithAutoRejection({
+  bookingId,
+  adminId,
+  rejectedBookingIds = [],
+  rescheduleFromId,
+}) {
+  return this.prisma.$transaction(async (tx) => {
+
+    // 1️⃣ Lấy booking mới (PHẢI là PENDING + có rescheduleFromId)
+    const newBooking = await tx.booking.findUnique({
+      where: { id: Number(bookingId) },
+      select: {
+        id: true,
+        status: true,
+        rescheduleFromId: true,
+        facilityId: true,
+        startTime: true,
+        endTime: true,
+        userId: true,
+      },
+    });
+
+    if (!newBooking) throw new Error("Booking không tồn tại.");
+    if (newBooking.status !== "PENDING")
+      throw new Error("Chỉ có thể duyệt booking PENDING.");
+
+    if (
+      !newBooking.rescheduleFromId ||
+      Number(newBooking.rescheduleFromId) !== Number(rescheduleFromId)
+    ) {
+      throw new Error("Reschedule không hợp lệ (rescheduleFromId mismatch).");
+    }
+
+    // 2️⃣ SAFETY CHECK: đã có APPROVED khác chắn chỗ chưa?
+    const approvedConflict = await tx.booking.findFirst({
+      where: {
+        facilityId: newBooking.facilityId,
+        status: "APPROVED",
+        startTime: { lt: newBooking.endTime },
+        endTime: { gt: newBooking.startTime },
+        id: { not: newBooking.id },
+      },
+    });
+
+    if (approvedConflict) {
+      throw new Error(
+        `Không thể duyệt. Đã có booking APPROVED (#${approvedConflict.id}) trong khung giờ này.`
+      );
+    }
+
+    // 3️⃣ APPROVE booking mới
+    const approved = await tx.booking.update({
+      where: { id: newBooking.id },
+      data: { status: "APPROVED" },
+      include: { user: true, facility: true, bookingType: true },
+    });
+
+    await tx.bookingHistory.create({
+      data: {
+        bookingId: approved.id,
+        oldStatus: "PENDING",
+        newStatus: "APPROVED",
+        changeReason: `Admin approved (Reschedule from #${rescheduleFromId})`,
+        previousFacilityId: approved.facilityId,
+        changedById: adminId,
+      },
+    });
+
+    // 4️⃣ Reject victims (PENDING trùng giờ)
+    let victims = rejectedBookingIds;
+    if (!victims || victims.length === 0) {
+      const pendingConflicts = await tx.booking.findMany({
+        where: {
+          id: { not: approved.id },
+          facilityId: approved.facilityId,
+          status: "PENDING",
+          startTime: { lt: approved.endTime },
+          endTime: { gt: approved.startTime },
+        },
+        select: { id: true },
+      });
+      victims = pendingConflicts.map((x) => x.id);
+    }
+
+    if (victims.length > 0) {
+      await tx.booking.updateMany({
+        where: { id: { in: victims } },
+        data: { status: "REJECTED" },
+      });
+
+      await tx.bookingHistory.createMany({
+        data: victims.map((id) => ({
+          bookingId: id,
+          oldStatus: "PENDING",
+          newStatus: "REJECTED",
+          changeReason: `Auto rejected do trùng lịch với booking đã được duyệt (#${approved.id}).`,
+          changedById: adminId,
+        })),
+      });
+    }
+
+    // 5️⃣ Cancel booking cũ (CHỈ khi APPROVED / PENDING)
+    const oldBooking = await tx.booking.findUnique({
+      where: { id: Number(rescheduleFromId) },
+      select: { id: true, status: true, facilityId: true },
+    });
+
+    if (oldBooking && ["APPROVED", "PENDING"].includes(oldBooking.status)) {
+      await tx.booking.update({
+        where: { id: oldBooking.id },
+        data: { status: "CANCELLED" },
+      });
+
+      await tx.bookingHistory.create({
+        data: {
+          bookingId: oldBooking.id,
+          oldStatus: oldBooking.status,
+          newStatus: "CANCELLED",
+          changeReason: `Bị hủy do đổi lịch sang booking mới (#${approved.id}).`,
+          previousFacilityId: oldBooking.facilityId,
+          changedById: adminId,
+        },
+      });
+    }
+
+    return {
+      approved,
+      rejectedIds: victims,
+      rescheduleFromId,
+    };
+  });
+}
+
+
 
   async reject(bookingId, adminId, reason) {
     return this.prisma.$transaction(async (tx) => {
@@ -252,19 +433,22 @@ class PrismaBookingRepository {
     });
   }
 
-  async create(data) {
-    return this.prisma.booking.create({
-      data: {
-        userId: data.userId,
-        facilityId: data.facilityId,
-        bookingTypeId: data.bookingTypeId,
-        startTime: data.startTime,
-        endTime: data.endTime,
-        status: data.status,
-        attendeeCount: data.attendeeCount,
-      },
-    });
-  }
+ async create(data) {
+  return this.prisma.booking.create({
+    data: {
+      userId: data.userId,
+      facilityId: data.facilityId,
+      bookingTypeId: data.bookingTypeId,
+      startTime: data.startTime,
+      endTime: data.endTime,
+      status: data.status,
+      attendeeCount: data.attendeeCount,
+      rescheduleFromId: data.rescheduleFromId ?? null,
+    },
+    include: { facility: true, bookingType: true }
+  });
+}
+
 
   async getUserConflictingBookings(userId, startTime, endTime) {
     return this.prisma.booking.findMany({
