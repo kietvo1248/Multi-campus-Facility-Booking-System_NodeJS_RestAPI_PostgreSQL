@@ -113,6 +113,13 @@ components:
         name: { type: string }
         campusId: { type: integer }
         leaderEmail: { type: string, description: "Email sinh viên làm Leader" }
+    
+    ClubUpdateInput:
+      type: object
+      properties:
+        name: { type: string }
+        leaderEmail: { type: string }
+        leaderId: { type: integer }
 
     ClubPriorityInput:
       type: object
@@ -136,13 +143,16 @@ components:
       properties:
         equipmentTypeId: { type: integer }
         quantity: { type: integer }
-        condition: { type: string }
+        condition: { type: string, default: "good" }
+        note: { type: string }
 
     FacilityEquipmentUpdate:
       type: object
+      required: [note]
       properties:
         quantity: { type: integer }
-        newCondition: { type: string }
+        newCondition: { type: string, enum: [good, poor] }
+        note: { type: string }
 
     FacilityEquipmentHistory:
       type: object
@@ -150,14 +160,15 @@ components:
         id: { type: integer }
         facilityId: { type: integer }
         equipmentTypeId: { type: integer }
-        action: { type: string, description: "Mô tả hành động (e.g. ADD, UPDATE, REMOVE)" }
+        action: { type: string, description: "ADD, UPDATE, DELETE" }
         note: { type: string }
         oldQuantity: { type: integer }
         newQuantity: { type: integer }
-        oldCondition: { type: string, enum: [good, poor] }
-        newCondition: { type: string, enum: [good, poor] }
+        oldCondition: { type: string }
+        newCondition: { type: string }
         createdById: { type: integer }
         createdAt: { type: string, format: date-time }
+
     # --- BOOKING & PROCESS ---
     BookingInput:
       type: object
@@ -198,6 +209,12 @@ components:
               attendeeCount: { type: integer }
 
     RejectInput:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string }
+    
+    CancelByAdminInput:
       type: object
       required: [reason]
       properties:
@@ -324,13 +341,6 @@ paths:
       responses:
         '200':
           description: List Available Facilities
-          content:
-            application/json:
-              example:
-                - id: 101
-                  name: "R101"
-                  capacity: 30
-                  type: { name: "Phòng học" }
 
   /bookings:
     post:
@@ -344,12 +354,6 @@ paths:
       responses:
         '201':
           description: Created (PENDING)
-          content:
-            application/json:
-              example:
-                id: 555
-                status: "PENDING"
-                facilityId: 101
 
   /bookings/me:
     get:
@@ -390,22 +394,6 @@ paths:
       responses:
         '200':
           description: OK
-          content:
-            application/json:
-              example:
-                - slotId: 1
-                  startTime: "07:00"
-                  endTime: "09:00"
-                  status: "AVAILABLE"
-                - slotId: 2
-                  startTime: "09:00"
-                  endTime: "11:00"
-                  status: "BOOKED"
-                  details: { status: "APPROVED" }
-                - slotId: 3
-                  startTime: "13:00"
-                  endTime: "15:00"
-                  status: "MY_BOOKING"
 
   /bookings/{id}/cancel:
     patch:
@@ -436,17 +424,6 @@ paths:
       responses:
         '200':
           description: Result Plan
-          content:
-            application/json:
-              example:
-                - week: 1
-                  date: "2023-10-01"
-                  status: "AVAILABLE"
-                  facilityName: "R101"
-                - week: 2
-                  date: "2023-10-08"
-                  status: "CONFLICT_RESOLVED"
-                  facilityName: "R102 (Thay thế)"
 
   /bookings/recurring:
     post:
@@ -567,6 +544,24 @@ paths:
       responses:
         '200': { description: Relocated }
 
+  /bookings/{id}/cancel-by-admin:
+    patch:
+      summary: "[MW7] Admin hủy đơn đặt phòng"
+      description: Dùng khi không còn phòng thay thế hoặc sự cố nghiêm trọng.
+      tags: [5. Admin - Booking Ops]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CancelByAdminInput' }
+      responses:
+        '200': { description: Cancelled }
+
   # ==========================================
   # TAG 6: ADMIN - RESOURCES & MAINTENANCE
   # ==========================================
@@ -591,16 +586,11 @@ paths:
       responses:
         '200':
           description: List of impacted bookings
-          content:
-            application/json:
-              example:
-                totalConflicts: 2
-                conflicts: [{ id: 1, userId: 5, startTime: "..." }]
 
   /maintenance/set:
     post:
-      summary: "[MW6.1] Thiết lập Bảo trì & Auto chuyển phòng (Cũ)"
-      description: Lưu ý nên dùng check-impact và move thủ công trước.
+      summary: "[MW6.1] Thiết lập Bảo trì & Auto chuyển phòng"
+      description: Tự động tìm phòng trống để chuyển, nếu không có thì hủy đơn.
       tags: [6. Admin - Resources & Maint]
       security: [{ bearerAuth: [] }]
       requestBody:
@@ -643,8 +633,88 @@ paths:
       responses:
         '200': { description: Updated }
 
+  # --- SW1: Campuses CRUD ---
+  /campuses:
+    get:
+      summary: "[SW1] Danh sách Campus"
+      tags: [6. Admin - Resources & Maint]
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: OK } }
+    post:
+      summary: "[SW1] Tạo Campus mới"
+      tags: [6. Admin - Resources & Maint]
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CampusInput' }
+      responses: { '201': { description: Created } }
+  /campuses/{id}:
+    put:
+      summary: "[SW1] Cập nhật Campus"
+      tags: [6. Admin - Resources & Maint]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          schema: { type: integer }
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CampusInput' }
+      responses: { '200': { description: Updated } }
+    delete:
+      summary: "[SW1] Xóa (Soft Delete) Campus"
+      tags: [6. Admin - Resources & Maint]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          schema: { type: integer }
+      responses: { '200': { description: Deleted } }
+
+  # --- SW1: Facility Types CRUD ---
+  /facility-types:
+    get:
+      summary: "[SW1] Danh sách loại phòng"
+      tags: [6. Admin - Resources & Maint]
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: OK } }
+    post:
+      summary: "[SW1] Tạo loại phòng mới"
+      tags: [6. Admin - Resources & Maint]
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/FacilityTypeInput' }
+      responses: { '201': { description: Created } }
+  /facility-types/{id}:
+    put:
+      summary: "[SW1] Cập nhật loại phòng"
+      tags: [6. Admin - Resources & Maint]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          schema: { type: integer }
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/FacilityTypeInput' }
+      responses: { '200': { description: Updated } }
+    delete:
+      summary: "[SW1] Xóa loại phòng"
+      tags: [6. Admin - Resources & Maint]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          schema: { type: integer }
+      responses: { '200': { description: Deleted } }
+
   # --- SW1: Facility & Equipment CRUD ---
-  /resources/facilities:
+  /facilities:
     get:
       summary: "[SW1] Xem danh sách phòng"
       tags: [6. Admin - Resources & Maint]
@@ -653,6 +723,15 @@ paths:
         - in: query
           name: typeId
           schema: { type: integer }
+        - in: query
+          name: campusId
+          schema: { type: integer }
+        - in: query
+          name: capacity
+          schema: { type: integer }
+        - in: query
+          name: status
+          schema: { type: string }
       responses:
         '200': { description: OK }
     post:
@@ -666,7 +745,17 @@ paths:
       responses:
         '201': { description: Created }
 
-  /resources/facilities/{id}:
+  /facilities/{id}:
+    get:
+      summary: "[SW1] Xem chi tiết phòng"
+      tags: [6. Admin - Resources & Maint]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses: { '200': { description: OK } }
     put:
       summary: "[SW1] Cập nhật phòng"
       tags: [6. Admin - Resources & Maint]
@@ -710,6 +799,30 @@ paths:
       responses:
         '201': { description: Created }
 
+  /equipment/types/{id}:
+    put:
+      summary: "[SW1] Cập nhật loại thiết bị"
+      tags: [6. Admin - Resources & Maint]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          schema: { type: integer }
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EquipmentTypeCreate' }
+      responses: { '200': { description: Updated } }
+    delete:
+      summary: "[SW1] Xóa loại thiết bị"
+      tags: [6. Admin - Resources & Maint]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          schema: { type: integer }
+      responses: { '200': { description: Deleted } }
+
   /equipment/facilities/{facilityId}:
     get:
       summary: "[SW1] Danh sách thiết bị của phòng"
@@ -736,6 +849,43 @@ paths:
             schema: { $ref: '#/components/schemas/FacilityEquipmentAdd' }
       responses:
         '201': { description: Added }
+
+  /equipment/facilities/{facilityId}/{equipmentTypeId}/{condition}:
+    put:
+      summary: "[SW1] Cập nhật thiết bị trong phòng"
+      description: Cập nhật số lượng hoặc tình trạng.
+      tags: [6. Admin - Resources & Maint]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: facilityId
+          schema: { type: integer }
+        - in: path
+          name: equipmentTypeId
+          schema: { type: integer }
+        - in: path
+          name: condition
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/FacilityEquipmentUpdate' }
+      responses: { '200': { description: Updated } }
+    delete:
+      summary: "[SW1] Xóa thiết bị khỏi phòng"
+      tags: [6. Admin - Resources & Maint]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: facilityId
+          schema: { type: integer }
+        - in: path
+          name: equipmentTypeId
+          schema: { type: integer }
+        - in: path
+          name: condition
+          schema: { type: string }
+      responses: { '200': { description: Removed } }
 
   /equipment/facilities/{facilityId}/history:
     get:
@@ -789,7 +939,40 @@ paths:
       responses:
         '201': { description: Created }
 
+  /clubs/{id}:
+    put:
+      summary: "[SW2] Cập nhật CLB"
+      tags: [6. Admin - Resources & Maint]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          schema: { type: integer }
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ClubUpdateInput' }
+      responses: { '200': { description: Updated } }
+    delete:
+      summary: "[SW2] Xóa (Soft Delete) CLB"
+      tags: [6. Admin - Resources & Maint]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          schema: { type: integer }
+      responses: { '200': { description: Deleted } }
+
   /clubs/{id}/priorities:
+    get:
+      summary: "[SW2] Xem danh sách phòng ưu tiên của CLB"
+      tags: [6. Admin - Resources & Maint]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          schema: { type: integer }
+      responses: { '200': { description: OK } }
     post:
       summary: "[SW2] Gán phòng ưu tiên"
       tags: [6. Admin - Resources & Maint]
@@ -804,6 +987,20 @@ paths:
             schema: { $ref: '#/components/schemas/ClubPriorityInput' }
       responses:
         '200': { description: Assigned }
+
+  /clubs/{id}/priorities/{facilityId}:
+    delete:
+      summary: "[SW2] Xóa quyền ưu tiên phòng"
+      tags: [6. Admin - Resources & Maint]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          schema: { type: integer }
+        - in: path
+          name: facilityId
+          schema: { type: integer }
+      responses: { '200': { description: Removed } }
 
   # ==========================================
   # TAG 7: SECURITY GUARD
@@ -863,6 +1060,18 @@ paths:
       responses:
         '201': { description: Reported }
 
+  /reports/booking:
+    post:
+      summary: "[SW4] Báo cáo sự cố trong giờ Booking"
+      tags: [7. Security Guard]
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReportCreateBooking' }
+      responses:
+        '201': { description: Reported }
+
   # ==========================================
   # TAG 8: ANALYTICS (Campus Admin)
   # ==========================================
@@ -887,3 +1096,40 @@ paths:
                 overview: { total: 150, breakdown: { APPROVED: 100 } }
                 rates: { cancellationRate: 5.5, occupancyRate: 60 }
                 topFacilities: []
+
+  # ==========================================
+  # TAG 9: REPORTS MANAGEMENT
+  # ==========================================
+  /reports:
+    get:
+      summary: "[SW4] Danh sách báo cáo (Admin)"
+      tags: [9. Reports]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: query
+          name: page
+          schema: { type: integer }
+        - in: query
+          name: limit
+          schema: { type: integer }
+        - in: query
+          name: status
+          schema: { type: string }
+        - in: query
+          name: category
+          schema: { type: string }
+        - in: query
+          name: keyword
+          schema: { type: string }
+      responses: { '200': { description: OK } }
+
+  /reports/{id}:
+    get:
+      summary: "[SW4] Xem chi tiết báo cáo"
+      tags: [9. Reports]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          schema: { type: integer }
+      responses: { '200': { description: OK } }
