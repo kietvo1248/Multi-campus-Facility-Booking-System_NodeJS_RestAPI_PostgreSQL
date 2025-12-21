@@ -39,7 +39,8 @@ class SetMaintenance {
           bookingId: booking.id,
           toFacilityId: alternative.id,
           reason: `Relocated due to maintenance (Log #${maintenance.id})`,
-          maintenanceLogId: maintenance.id
+          maintenanceLogId: maintenance.id,
+          changedBy: reportedBy
         });
         
         results.push({ 
