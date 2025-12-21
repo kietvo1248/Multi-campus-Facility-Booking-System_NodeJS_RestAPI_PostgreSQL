@@ -1,3 +1,5 @@
+const Logger = require('../../utils/logger');
+
 class AuthController {
   constructor(
     loginUserUseCase,
@@ -31,7 +33,7 @@ class AuthController {
 
       return res.status(200).json(result);
     } catch (error) {
-      console.error(error);
+      Logger.error('Login error', error, { email: req.body.email });
 
       const msg = error?.message || "Lỗi hệ thống";
 
@@ -69,7 +71,7 @@ class AuthController {
       const profile = await this.viewUserProfileUseCase.execute(userId);
       res.status(200).json(profile);
     } catch (error) {
-      console.error(error);
+      Logger.error('Get profile error', error, { userId });
       const statusCode = error.message === "Người dùng không tồn tại." ? 404 : 500;
       res.status(statusCode).json({ message: error.message });
     }
