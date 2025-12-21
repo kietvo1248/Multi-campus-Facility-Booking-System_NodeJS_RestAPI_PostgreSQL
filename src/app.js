@@ -59,9 +59,7 @@ const equipmentTypeRepository = new PrismaEquipmentTypeRepository(prisma);
 const facilityEquipmentRepository = new PrismaFacilityEquipmentRepository(prisma);
 
 //khởi tạo service
-const EmailService = require('./infrastructure/services/EmailService');
-const emailService = new EmailService();
-
+const emailService = require('./infrastructure/services/EmailService');
 
 // --- 2. Khởi tạo Application (Use Cases) ---
 
