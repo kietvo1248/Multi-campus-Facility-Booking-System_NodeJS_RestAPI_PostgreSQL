@@ -1,3 +1,10 @@
+/**
+ * Main Application Entry Point
+ * FPTU Multi-campus Facility Booking System API
+ * 
+ * @module app
+ */
+
 const express = require('express');
 const cors = require('cors');
 const { PrismaClient } = require('@prisma/client');
@@ -5,8 +12,12 @@ const passport = require('passport');
 const cookieParser = require('cookie-parser');
 const swaggerUi = require('swagger-ui-express');
 const YAML = require('yamljs');
+const requestLogger = require('./interfaces/middlewares/requestLogger');
+const { errorHandler, notFoundHandler } = require('./interfaces/middlewares/errorHandler');
 
 const app = express();
+
+// Middleware
 app.use(cookieParser());
 app.use(
   cors({
@@ -21,6 +32,7 @@ app.use(
 app.options(/.*/, cors());
 
 app.use(express.json());
+app.use(requestLogger); // Request logging middleware
 
 // --- 1. Khởi tạo Infrastructure ---
 const prisma = new PrismaClient();
@@ -45,6 +57,9 @@ const clubRepository = new PrismaClubRepository(prisma);
 const clubPriorityRepository = new PrismaClubPriorityRepository(prisma);
 const equipmentTypeRepository = new PrismaEquipmentTypeRepository(prisma);
 const facilityEquipmentRepository = new PrismaFacilityEquipmentRepository(prisma);
+
+//khởi tạo service
+const emailService = require('./infrastructure/services/EmailService');
 
 // --- 2. Khởi tạo Application (Use Cases) ---
 
@@ -82,7 +97,7 @@ const ClubService = require('./application/resources/clubService');
 const EquipmentTypeService = require('./application/equipment/equipmentTypeService');
 const FacilityEquipmentService = require('./application/equipment/facilityEquipmentService');
 
-const setMaintenanceUseCase = new SetMaintenance(maintenanceRepository, bookingRepository, facilityRepository);
+const setMaintenanceUseCase = new SetMaintenance(maintenanceRepository, bookingRepository, facilityRepository, emailService);
 const campusService = new CampusService(campusRepository);
 const facilityTypeService = new FacilityTypeService(facilityTypeRepository);
 const facilityService = new FacilityService(facilityRepository);
@@ -120,8 +135,8 @@ const GetDashboardStats = require('./application/admin/GetDashboardStats');
 const createShortTermBooking = new CreateShortTermBooking(bookingRepository, facilityRepository, prisma);
 const findAvailableFacilities = new FindAvailableFacilities(facilityRepository);
 const getClubBookingSuggestionsUseCase = new GetClubBookingSuggestions(facilityRepository, clubRepository);
-const approveBookingUseCase = new ApproveBooking(bookingRepository);
-const rejectBookingUseCase = new RejectBooking(bookingRepository);
+const approveBookingUseCase = new ApproveBooking(bookingRepository, emailService);
+const rejectBookingUseCase = new RejectBooking(bookingRepository, emailService);
 const searchBookingForCheckIn = new SearchBookingForCheckIn(bookingRepository);
 const checkInBooking = new CheckInBooking(bookingRepository);
 const checkOutBooking = new CheckOutBooking(bookingRepository);
@@ -137,7 +152,7 @@ const viewAllBookings = new ViewAllBookings(bookingRepository);
 //
 const scanRecurringAvailability = new ScanRecurringAvailability(bookingRepository, facilityRepository);
 const createRecurringBooking = new CreateRecurringBooking(bookingRepository);
-const relocateBooking = new RelocateBooking(bookingRepository, facilityRepository);
+const relocateBooking = new RelocateBooking(bookingRepository, facilityRepository, emailService);
 const checkMaintenanceImpact = new CheckMaintenanceImpact(bookingRepository);
 //
 const getDashboardStats = new GetDashboardStats(bookingRepository, facilityRepository);
@@ -248,6 +263,18 @@ app.use('/api/equipment', equipmentRouter);// thiết bị
 app.use('/api/reports', reportRouter);// báo cáo
 
 // Health check
-app.get('/health', (req, res) => res.send('Server is healthy'));
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    environment: process.env.NODE_ENV || 'development',
+    version: '1.0.0'
+  });
+});
+
+// Error handling middleware (must be last)
+app.use(notFoundHandler); // 404 handler
+app.use(errorHandler); // Global error handler
 
 module.exports = app;

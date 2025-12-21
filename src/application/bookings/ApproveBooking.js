@@ -1,16 +1,19 @@
 class ApproveBooking {
-  constructor(bookingRepository) {
+  // 1. Inject emailService
+  constructor(bookingRepository, emailService) {
     this.bookingRepository = bookingRepository;
+    this.emailService = emailService;
   }
 
   async execute(bookingId, adminId) {
-    // 1) Lấy thông tin đơn
+    // Lấy thông tin booking (Cần đảm bảo Repo trả về cả User và Facility)
     const booking = await this.bookingRepository.findById(bookingId);
+    
     if (!booking) throw new Error("Đơn đặt phòng không tồn tại.");
     if (booking.status !== "PENDING")
       throw new Error("Chỉ có thể duyệt các đơn đang chờ (PENDING).");
 
-    // 2) Safety Check: Có đơn nào đã Approved chắn chỗ không?
+    // Safety Check: Xung đột đơn APPROVED
     const approvedConflict = await this.bookingRepository.findApprovedConflicts(
       booking.facilityId,
       booking.startTime,
@@ -22,7 +25,7 @@ class ApproveBooking {
       );
     }
 
-    // 3) Tìm các đơn PENDING khác bị trùng (Victims)
+    // Tìm đơn PENDING khác bị trùng
     const pendingConflicts = await this.bookingRepository.findPendingConflicts(
       booking.facilityId,
       booking.startTime,
@@ -31,23 +34,38 @@ class ApproveBooking {
     );
     const rejectedIds = pendingConflicts.map((b) => b.id);
 
-    // 4) ✅ Nếu đây là đơn "đổi lịch" (reschedule)
-    // booking.rescheduleFromId phải tồn tại trong DB/Prisma
+    let result;
+    // Xử lý duyệt trong DB
     if (booking.rescheduleFromId) {
-      return await this.bookingRepository.approveRescheduleWithAutoRejection({
+      result = await this.bookingRepository.approveRescheduleWithAutoRejection({
         bookingId,
         adminId,
         rejectedBookingIds: rejectedIds,
         rescheduleFromId: booking.rescheduleFromId,
       });
+    } else {
+      result = await this.bookingRepository.approveWithAutoRejection({
+        bookingId,
+        adminId,
+        rejectedBookingIds: rejectedIds,
+      });
     }
 
-    // 5) Bình thường
-    return await this.bookingRepository.approveWithAutoRejection({
-      bookingId,
-      adminId,
-      rejectedBookingIds: rejectedIds,
-    });
+    //GỬI EMAIL THÔNG BÁO (APPROVED)
+    if (this.emailService && booking.user && booking.user.email) {
+      await this.emailService.sendBookingNotification(
+        booking.user.email,
+        {
+          roomName: booking.facility ? booking.facility.name : "Phòng học",
+          date: booking.startTime,
+          startTime: booking.startTime,
+          endTime: booking.endTime
+        },
+        'APPROVED'
+      );
+    }
+
+    return result;
   }
 }
 

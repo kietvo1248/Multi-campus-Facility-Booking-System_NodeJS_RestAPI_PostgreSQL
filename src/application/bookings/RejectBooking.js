@@ -1,6 +1,8 @@
 class RejectBooking {
-    constructor(bookingRepository) {
+    // 1. Inject emailService
+    constructor(bookingRepository, emailService) {
         this.bookingRepository = bookingRepository;
+        this.emailService = emailService;
     }
 
     async execute(bookingId, adminId, reason) {
@@ -10,7 +12,25 @@ class RejectBooking {
 
         if (!reason) throw new Error("Vui lòng nhập lý do từ chối.");
 
-        return await this.bookingRepository.reject(bookingId, adminId, reason);
+        // Xử lý từ chối trong DB
+        const result = await this.bookingRepository.reject(bookingId, adminId, reason);
+
+        //GỬI EMAIL THÔNG BÁO (REJECTED)
+        if (this.emailService && booking.user && booking.user.email) {
+            await this.emailService.sendBookingNotification(
+                booking.user.email,
+                {
+                    roomName: booking.facility ? booking.facility.name : "Phòng học",
+                    date: booking.startTime,
+                    startTime: booking.startTime,
+                    endTime: booking.endTime
+                },
+                'REJECTED',
+                reason // Gửi kèm lý do
+            );
+        }
+
+        return result;
     }
 }
 module.exports = RejectBooking;

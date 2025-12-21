@@ -1,55 +1,70 @@
 // src/application/maintenance/setMaintenance.js
 
 class SetMaintenance {
-  constructor(maintenanceRepository, bookingRepository, facilityRepository) { // Cần thêm facilityRepo để lấy info phòng
+  // 1. Inject emailService
+  constructor(maintenanceRepository, bookingRepository, facilityRepository, emailService) {
     this.maintenanceRepository = maintenanceRepository;
     this.bookingRepository = bookingRepository;
     this.facilityRepository = facilityRepository; 
+    this.emailService = emailService;
   }
 
   async execute({ facilityId, startDate, endDate, reason, reportedBy }) {
-    // 1. Tạo Maintenance Log trước để khóa phòng
+    // 1. Tạo Maintenance Log
     const maintenance = await this.maintenanceRepository.createMaintenanceLog({
       facilityId, startDate, endDate, reason, reportedBy
     });
 
-    // 2. Tìm các booking bị ảnh hưởng
+    // 2. Lấy booking bị ảnh hưởng (Lưu ý: Repo cần include User)
     const affectedBookings = await this.bookingRepository.getApprovedBookingsOverlapping(facilityId, startDate, endDate);
     
     const results = [];
 
     // 3. Vòng lặp xử lý từng booking
     for (const booking of affectedBookings) {
-      // Lấy thông tin phòng hiện tại (để biết Type và Capacity)
-      // Lưu ý: bookingRepository.getFacilityById là hàm cần thiết hoặc dùng facilityRepository
       const currentFacility = await this.facilityRepository.findById(booking.facilityId);
+      
+      // Lấy email user nếu có
+      const userEmail = booking.user ? booking.user.email : null;
 
       // Tìm phòng thay thế
       const alternative = await this.bookingRepository.findAlternativeFacility({
         campusId: currentFacility.campusId,
         typeId: currentFacility.typeId,
-        minCapacity: currentFacility.capacity, // Tìm phòng to bằng hoặc hơn
+        minCapacity: currentFacility.capacity, 
         startDate: booking.startTime,
         endTime: booking.endTime
       });
 
       if (alternative) {
-        // CASE A: Tìm thấy -> Relocate
+        // CASE A: Dời phòng thành công (RELOCATED)
         await this.bookingRepository.relocateBooking({
           bookingId: booking.id,
           toFacilityId: alternative.id,
           reason: `Relocated due to maintenance (Log #${maintenance.id})`,
-          maintenanceLogId: maintenance.id
+          maintenanceLogId: maintenance.id,
+          changedBy: reportedBy
         });
         
-        results.push({ 
-          bookingId: booking.id, 
-          action: 'RELOCATED', 
-          from: facilityId, 
-          to: alternative.id 
-        });
+        // Gửi mail thông báo đổi phòng
+        if (this.emailService && userEmail) {
+            await this.emailService.sendBookingNotification(
+                userEmail,
+                {
+                    roomName: alternative.name, // Phòng mới
+                    date: booking.startTime,
+                    startTime: booking.startTime,
+                    endTime: booking.endTime
+                },
+                'RELOCATED',
+                `Phòng cũ bảo trì: ${reason}. Chúng tôi đã chuyển bạn sang phòng tương đương.`
+            );
+        }
+
+        results.push({ bookingId: booking.id, action: 'RELOCATED', to: alternative.id });
+
       } else {
-        // CASE B: Không tìm thấy -> Cancel
+        // CASE B: Phải hủy lịch (CANCELLED)
         await this.bookingRepository.cancelBooking({
           bookingId: booking.id,
           reason: `Cancelled: Facility Maintenance (Log #${maintenance.id}) - No alternative found`,
@@ -57,10 +72,22 @@ class SetMaintenance {
           changedBy: reportedBy
         });
 
-        results.push({ 
-          bookingId: booking.id, 
-          action: 'CANCELLED' 
-        });
+        // Gửi mail thông báo hủy
+        if (this.emailService && userEmail) {
+            await this.emailService.sendBookingNotification(
+                userEmail,
+                {
+                    roomName: currentFacility.name,
+                    date: booking.startTime,
+                    startTime: booking.startTime,
+                    endTime: booking.endTime
+                },
+                'MAINTENANCE', // Dùng type MAINTENANCE để báo hủy do bảo trì
+                `Phòng bảo trì: ${reason}. Rất tiếc không tìm được phòng trống thay thế.`
+            );
+        }
+
+        results.push({ bookingId: booking.id, action: 'CANCELLED' });
       }
     }
 

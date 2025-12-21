@@ -11,7 +11,7 @@ class PrismaMaintenanceRepository {
       data: {
         facilityId: Number(facilityId), // Đảm bảo ép kiểu số
         startDate: new Date(startDate),
-        endDate: new Date(endDate),
+        endDate: endDate ? new Date(endDate) : null,
         reason: reason,
         status: 'SCHEDULED',
         

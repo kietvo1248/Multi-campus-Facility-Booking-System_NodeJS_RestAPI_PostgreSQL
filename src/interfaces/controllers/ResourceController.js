@@ -1,3 +1,5 @@
+const Logger = require('../../utils/logger');
+
 class ResourceController {
   constructor({
     campusService,
@@ -268,13 +270,12 @@ class ResourceController {
         return res.status(400).json({ message: "Mã CLB (code) là bắt buộc" });
       }
 
-      // Log để debug
-      console.log("Creating club with data:", JSON.stringify(body));
+      Logger.debug("Creating club", body);
 
       const data = await this.clubService.create(body);
       res.status(201).json(data);
     } catch (e) {
-      console.error("Error creating club:", e);
+      Logger.error("Error creating club", e, body);
       // Kiểm tra nếu lỗi do unique constraint
       if (e.code === "P2002") {
         return res

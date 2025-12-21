@@ -271,7 +271,7 @@ buildTime(dateISO, hhmm) {
 }) {
   return this.prisma.$transaction(async (tx) => {
 
-    // 1️⃣ Lấy booking mới (PHẢI là PENDING + có rescheduleFromId)
+    // 1 Lấy booking mới (PHẢI là PENDING + có rescheduleFromId)
     const newBooking = await tx.booking.findUnique({
       where: { id: Number(bookingId) },
       select: {
@@ -296,7 +296,7 @@ buildTime(dateISO, hhmm) {
       throw new Error("Reschedule không hợp lệ (rescheduleFromId mismatch).");
     }
 
-    // 2️⃣ SAFETY CHECK: đã có APPROVED khác chắn chỗ chưa?
+    // 2 SAFETY CHECK: đã có APPROVED khác chắn chỗ chưa?
     const approvedConflict = await tx.booking.findFirst({
       where: {
         facilityId: newBooking.facilityId,
@@ -313,7 +313,7 @@ buildTime(dateISO, hhmm) {
       );
     }
 
-    // 3️⃣ APPROVE booking mới
+    // 3 APPROVE booking mới
     const approved = await tx.booking.update({
       where: { id: newBooking.id },
       data: { status: "APPROVED" },
@@ -331,7 +331,7 @@ buildTime(dateISO, hhmm) {
       },
     });
 
-    // 4️⃣ Reject victims (PENDING trùng giờ)
+    // 4 Reject victims (PENDING trùng giờ)
     let victims = rejectedBookingIds;
     if (!victims || victims.length === 0) {
       const pendingConflicts = await tx.booking.findMany({
@@ -364,7 +364,7 @@ buildTime(dateISO, hhmm) {
       });
     }
 
-    // 5️⃣ Cancel booking cũ (CHỈ khi APPROVED / PENDING)
+    // 5 Cancel booking cũ (CHỈ khi APPROVED / PENDING)
     const oldBooking = await tx.booking.findUnique({
       where: { id: Number(rescheduleFromId) },
       select: { id: true, status: true, facilityId: true },
@@ -400,21 +400,38 @@ buildTime(dateISO, hhmm) {
 
   async reject(bookingId, adminId, reason) {
     return this.prisma.$transaction(async (tx) => {
+      const existingBooking = await tx.booking.findUnique({
+        where: { id: bookingId },
+        select: { status: true, userId: true }
+      });
+
+      if (!existingBooking) {
+        throw new Error("Đơn đặt phòng không tồn tại.");
+      }
+
+      if (existingBooking.status !== 'PENDING') {
+         throw new Error(`Không thể từ chối đơn đang ở trạng thái ${existingBooking.status}.`);
+      }
+
+      //BƯỚC 2: Update trạng thái
       const booking = await tx.booking.update({
         where: { id: bookingId },
         data: { status: "REJECTED" },
         include: { user: true, facility: true },
       });
 
+      //BƯỚC 3: Ghi lịch sử
       await tx.bookingHistory.create({
         data: {
           bookingId,
-          oldStatus: "PENDING",
+          oldStatus: existingBooking.status, // Dùng status cũ chính xác
           newStatus: "REJECTED",
-          changeReason: reason,
+          changeReason: reason || "Admin rejected",
           changedById: adminId,
+          // Lưu ý: Nếu schema yêu cầu previousFacilityId thì cần query thêm facilityId ở Bước 1
         },
       });
+      
       return booking;
     });
   }
