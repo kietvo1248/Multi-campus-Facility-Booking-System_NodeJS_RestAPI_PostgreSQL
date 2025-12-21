@@ -64,3 +64,22 @@ Hệ thống giúp giải quyết bài toán xung đột lịch đặt, tối ư
 
 6.  **Truy cập tài liệu API:**
     * Mở trình duyệt: `http://localhost:3000/api-docs`
+
+## 5. Cấu trúc dự án
+```
+src/
+├── application/    # Business logic (Use Cases)
+├── domain/         # Domain entities and interfaces
+├── infrastructure/ # External integrations (DB, Services)
+├── interfaces/     # Controllers, Routes, Middlewares
+└── utils/          # Utility functions
+```
+
+## 6. Scripts có sẵn
+* `pnpm run start` - Chạy server production
+* `pnpm run dev` - Chạy server development (hot-reload)
+* `pnpm run db:seed` - Seed dữ liệu mẫu
+* `pnpm run db:generate` - Generate Prisma Client
+* `pnpm run db:migrate` - Chạy migrations
+* `pnpm run db:studio` - Mở Prisma Studio
+* `pnpm run db:reset` - Reset database và chạy lại migrations
