@@ -32,7 +32,7 @@ class CancelBookingByUser {
         }
 
         // 5. Gọi Repo hủy
-        return await this.bookingRepository.cancelByUser(bookingId, userId, "User requested cancellation");
+        return await this.bookingRepository.cancelByUser(bookingId, userId, "Người dùng yêu cầu hủy");
     }
 }
 module.exports = CancelBookingByUser;

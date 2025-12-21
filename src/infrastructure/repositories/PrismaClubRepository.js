@@ -79,4 +79,4 @@ class PrismaClubRepository {
     });
   }
 }
-module.exports = PrismaClubRepository
+module.exports = PrismaClubRepository;

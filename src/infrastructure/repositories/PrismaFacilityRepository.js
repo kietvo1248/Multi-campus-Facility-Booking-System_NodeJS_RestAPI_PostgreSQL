@@ -44,6 +44,13 @@ class PrismaFacilityRepository {
           where.capacity = { gte: cap };
       }
     }
+
+    if (filters.equipmentTypeId) {
+      const eqId = Number(filters.equipmentTypeId);
+      if (!isNaN(eqId)) {
+        where.equipment = { some: { equipmentTypeId: eqId } };
+      }
+    }
     
     // Log để kiểm tra (Xóa khi deploy)
     // console.log('Prisma Where Clause:', JSON.stringify(where, null, 2));
@@ -63,6 +70,26 @@ class PrismaFacilityRepository {
       ]
     })
   }
+  async findByEquipmentType({ campusId, equipmentTypeId, condition }) {
+    const where = {
+      equipment: {
+        some: {
+          equipmentTypeId: Number(equipmentTypeId),
+          ...(condition ? { condition: String(condition) } : {})
+        }
+      }
+    };
+    if (campusId) where.campusId = Number(campusId);
+    return this.prisma.facility.findMany({
+      where,
+      include: {
+        type: true,
+        campus: true,
+        equipment: { include: { equipmentType: true } }
+      },
+      orderBy: [{ id: 'asc' }]
+    })
+  }
   async findAvailable({ campusId, typeId, minCapacity, startTime, endTime }) {
     const whereClause = {
       campusId: Number(campusId), 
@@ -77,7 +104,7 @@ class PrismaFacilityRepository {
         // Loại trừ các phòng đang có Booking APPROVED hoặc PENDING trong khung giờ này
         bookings: {
           none: {
-            status: { in: ['APPROVED', 'PENDING'] }, // Coi như bận nếu đang chờ duyệt hoặc đã duyệt
+             status: 'APPROVED', // Coi như bận nếu đang chờ duyệt hoặc đã duyệt
             OR: [
               {
                 startTime: { lt: endTime },

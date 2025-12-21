@@ -8,7 +8,18 @@ const YAML = require('yamljs');
 
 const app = express();
 app.use(cookieParser());
-app.use(cors());
+app.use(
+  cors({
+    origin: "http://localhost:5173", // FE Vite
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  })
+);
+
+// để chắc ăn (preflight)
+app.options(/.*/, cors());
+
 app.use(express.json());
 
 // --- 1. Khởi tạo Infrastructure ---
@@ -47,7 +58,7 @@ const ListUsers = require('./application/users/ListUsers');
 const ToggleUserStatus = require('./application/users/ToggleUserStatus');
 
 const loginUserUseCase = new LoginUser(userRepository);
-const viewUserProfileUseCase = new ViewUserProfile(userRepository);
+const viewUserProfileUseCase = new ViewUserProfile(userRepository, clubRepository);
 const loginGoogleUserUseCase = new LoginGoogleUser(userRepository);
 const updateProfileUseCase = new UpdateUserProfile(userRepository);
 const updatePasswordUseCase = new UpdateUserPassword(userRepository);
@@ -79,7 +90,7 @@ const clubService = new ClubService(clubRepository, clubPriorityRepository, user
 const equipmentTypeService = new EquipmentTypeService(equipmentTypeRepository);
 const facilityEquipmentService = new FacilityEquipmentService(facilityEquipmentRepository);
 
-// 2.3 Booking Use Cases (Đã chuẩn hóa tên file PascalCase)
+// 2.3 Booking Use Cases 
 const CreateShortTermBooking = require('./application/bookings/createShortTermBooking');
 const FindAvailableFacilities = require('./application/bookings/findAvailableFacilities');
 const GetClubBookingSuggestions = require('./application/bookings/getClubBookingSuggestions');
@@ -91,9 +102,12 @@ const CheckOutBooking = require('./application/bookings/CheckOutBooking');
 const GetMyBookings = require('./application/bookings/GetMyBookings'); // Đảm bảo file tên là GetMyBookings.js
 const GetBookingDetail = require('./application/bookings/getBookingDetail');
 const CancelBookingByUser = require('./application/bookings/CancelBookingByUser');
+const CancelBookingByAdmin = require('./application/bookings/CancelBookingByAdmin');
 // [MỚI] Thêm 2 Use Case Admin
 const ListPendingBookings = require('./application/bookings/ListPendingBookings');
-const ListBookingConflicts = require('./application/bookings/ListBookingConflicts');
+const ViewAllBookings = require('./application/bookings/ViewAllBooking');
+const GetFacilitySchedule = require('./application/bookings/GetFacilitySchedule');
+//const ListBookingConflicts = require('./application/bookings/ListBookingConflicts');
 //
 const ScanRecurringAvailability = require('./application/bookings/ScanRecurringAvailability');
 const CreateRecurringBooking = require('./application/bookings/CreateRecurringBooking');
@@ -114,9 +128,12 @@ const checkOutBooking = new CheckOutBooking(bookingRepository);
 const getMyBookings = new GetMyBookings(bookingRepository);
 const getBookingDetail = new GetBookingDetail(bookingRepository);
 const cancelBookingByUser = new CancelBookingByUser(bookingRepository);
+const cancelBookingByAdmin = new CancelBookingByAdmin(bookingRepository);
 // [MỚI] Init 2 Use Case Admin
 const listPendingBookings = new ListPendingBookings(bookingRepository);
-const listBookingConflicts = new ListBookingConflicts(bookingRepository);
+const getFacilitySchedule = new GetFacilitySchedule(bookingRepository);
+const viewAllBookings = new ViewAllBookings(bookingRepository);
+//const listBookingConflicts = new ListBookingConflicts(bookingRepository);
 //
 const scanRecurringAvailability = new ScanRecurringAvailability(bookingRepository, facilityRepository);
 const createRecurringBooking = new CreateRecurringBooking(bookingRepository);
@@ -128,10 +145,10 @@ const getDashboardStats = new GetDashboardStats(bookingRepository, facilityRepos
 
 // --- 3. Khởi tạo Interfaces (Controllers) ---
 const AuthController = require('./interfaces/controllers/AuthController');
-const authController = new AuthController(loginUserUseCase, viewUserProfileUseCase, loginGoogleUserUseCase, updateProfileUseCase, updatePasswordUseCase, listUsersUseCase, toggleUserStatusUseCase); // Thêm dependency còn thiếu
+const authController = new AuthController(loginUserUseCase, viewUserProfileUseCase, loginGoogleUserUseCase, updateProfileUseCase, updatePasswordUseCase); // Thêm dependency còn thiếu
 
 const UserController = require('./interfaces/controllers/UserController');
-const userController = new UserController(updateProfileUseCase, updatePasswordUseCase);
+const userController = new UserController(updateProfileUseCase, updatePasswordUseCase, listUsersUseCase, toggleUserStatusUseCase);
 
 const MaintenanceController = require('./interfaces/controllers/MaintenanceController');
 const maintenanceController = new MaintenanceController(
@@ -144,24 +161,26 @@ const resourceController = new ResourceController({ campusService, facilityTypeS
 
 const BookingController = require('./interfaces/controllers/BookingController');
 const bookingController = new BookingController({ 
-  createShortTermBooking, 
+  // --- Các Use Case cũ ---
   findAvailableFacilities,
+  createShortTermBooking,
   getClubBookingSuggestions: getClubBookingSuggestionsUseCase,
   approveBooking: approveBookingUseCase,
   rejectBooking: rejectBookingUseCase,
   searchBookingForCheckIn,
   checkInBooking,
   checkOutBooking,
-  bookingRepository, // Lưu ý: Controller vẫn đang dùng trực tiếp repo cho listPending, nên cứ để lại
   getMyBookings,
   getBookingDetail,
   cancelBookingByUser,
-  // [MỚI] Inject vào Controller
-  listPendingBookings,
-  listBookingConflicts,
+  cancelBookingByAdmin,
+  bookingRepository, 
   scanRecurringAvailability,
   createRecurringBooking,
-  relocateBooking
+  relocateBooking,
+  listPendingBookings,
+  viewAllBookings,
+  getFacilitySchedule 
 });
 const AnalyticsController = require('./interfaces/controllers/AnalyticsController');
 const analyticsController = new AnalyticsController(getDashboardStats);
@@ -194,7 +213,7 @@ const clubRouter = createClubRouter(resourceController);
 const createBookingRouter = require('./interfaces/routes/BookingRoutes');
 const bookingRouter = createBookingRouter(bookingController);
 const EquipmentController = require('./interfaces/controllers/EquipmentController');
-const equipmentController = new EquipmentController({ equipmentTypeService, facilityEquipmentService });
+const equipmentController = new EquipmentController({ equipmentTypeService, facilityEquipmentService, facilityService });
 const createEquipmentRouter = require('./interfaces/routes/EquipmentRoutes');
 const equipmentRouter = createEquipmentRouter(equipmentController);
 const ReportController = require('./interfaces/controllers/ReportController');
@@ -225,6 +244,8 @@ app.use('/api/clubs', clubRouter);
 app.use('/api/bookings', bookingRouter);// đặt phòng
 app.use('/api/resources', resourceRouter);
 app.use('/api/analytics', analyticsRouter);// thống kê
+app.use('/api/equipment', equipmentRouter);// thiết bị
+app.use('/api/reports', reportRouter);// báo cáo
 
 // Health check
 app.get('/health', (req, res) => res.send('Server is healthy'));

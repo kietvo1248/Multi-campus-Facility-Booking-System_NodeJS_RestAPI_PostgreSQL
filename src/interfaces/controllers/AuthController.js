@@ -3,7 +3,9 @@ class AuthController {
     loginUserUseCase,
     viewUserProfileUseCase,
     updateProfileUseCase,
-    changePasswordUseCase
+    changePasswordUseCase,
+    listUsersUseCase,
+    toggleUserStatusUseCase
   ) {
     this.loginUserUseCase = loginUserUseCase;
     this.viewUserProfileUseCase = viewUserProfileUseCase;
@@ -86,32 +88,22 @@ class AuthController {
     })(req, res, next);
   }
 
-  googleCallback(req, res, next, passport) {
-    passport.authenticate("google", { session: false }, (err, data) => {
-      if (err) {
-        const errorMessage = encodeURIComponent(err.message);
-        return res.redirect(`http://localhost:5000/login?error=${errorMessage}`);
-      }
+googleCallback(req, res, next, passport) {
+  passport.authenticate("google", { session: false }, (err, data) => {
+    if (err || !data) {
+      return res.redirect(`${process.env.FRONTEND_URL}/login?error=google_failed`);
+    }
 
-      if (!data) {
-        return res.redirect("http://localhost:5000/login?error=AuthenticationFailed");
-      }
+    const { token } = data;
 
-      const { token } = data;
+    // ✅ Redirect kèm token
+    return res.redirect(
+      `${process.env.FRONTEND_URL}/auth/callback?token=${token}`
+    );
+  })(req, res, next);
+}
 
-      // ⚠️ Bạn đang set httpOnly:false để FE đọc cookie.
-      // Nếu dùng Bearer token (localStorage) thì không cần cookie phần này.
-      res.cookie("access_token", token, {
-        maxAge: 2 * 60 * 1000,
-        httpOnly: false,
-        secure: false,
-        sameSite: "lax",
-        path: "/",
-      });
 
-      return res.redirect("http://localhost:5000");
-    })(req, res, next);
-  }
 }
 
 module.exports = AuthController;

@@ -1,5 +1,6 @@
 const IUserRepository = require('../../domain/repositories/IUserRepository');
 const User = require('../../domain/entities/User');
+const { id } = require('date-fns/locale');
 
 class PrismaUserRepository extends IUserRepository {
     constructor(prismaClient) {
@@ -80,15 +81,16 @@ class PrismaUserRepository extends IUserRepository {
         };
 
         // Lọc theo Role (STUDENT, LECTURER, FACILITY_ADMIN...)
-        if (role && role !== 'ALL') {
+        if (role && role !== 'ALL' && role !== '') {
             where.role = role;
         }
 
         // Tìm kiếm theo tên hoặc email
-        if (keyword) {
+        if (keyword && keyword.trim() !== '') {
+            const searchTerm = keyword.trim();
             where.OR = [
-                { fullName: { contains: keyword, mode: 'insensitive' } },
-                { email: { contains: keyword, mode: 'insensitive' } }
+                { fullName: { contains: searchTerm, mode: 'insensitive' } },
+                { email: { contains: searchTerm, mode: 'insensitive' } }
             ];
         }
 
@@ -97,10 +99,13 @@ class PrismaUserRepository extends IUserRepository {
 
         const users = await this.prisma.user.findMany({
             where,
-            include: { campus: true },
+            select: { // Thay include bằng select hoặc dùng exclude
+                id: true, fullName: true, email: true, 
+                role: true, campus: true, isActive: true 
+            },
             skip,
             take: Number(limit),
-            orderBy: { createdAt: 'desc' }
+            orderBy: { id: 'desc' }
         });
 
         return {
