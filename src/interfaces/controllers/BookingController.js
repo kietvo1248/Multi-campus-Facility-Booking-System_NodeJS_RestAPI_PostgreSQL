@@ -270,18 +270,21 @@ async approve(req, res) {
 
   async reject(req, res) {
     try {
-      const { bookingId } = req.params;
+      const rawId = req.params.id || req.params.bookingId;
       const { reason } = req.body;
       const adminId = req.user.id;
 
-      const bId = parseInt(bookingId);
-      if (isNaN(bId)) return res.status(400).json({ message: "Booking ID không hợp lệ" });
+      const bId = Number(rawId);
+      if (!bId || isNaN(bId)) {
+          return res.status(400).json({ message: "Booking ID không hợp lệ" });
+      }
 
+      // Gọi repository
       const result = await this.bookingRepository.reject(bId, adminId, reason);
 
       if (result.user && result.user.email) {
         const bookingDetails = {
-          roomName: result.facility.name,
+          roomName: result.facility ? result.facility.name : 'Phòng học', // Check null safety
           date: result.startTime,
           slot: `${result.startTime} - ${result.endTime}`
         };
@@ -292,7 +295,9 @@ async approve(req, res) {
 
       return res.json({ success: true, message: 'Đã từ chối booking.', data: result });
     } catch (error) {
-      return res.status(500).json({ error: error.message });
+      // Trả về lỗi rõ ràng hơn
+      const status = error.message.includes("không tồn tại") ? 404 : 500;
+      return res.status(status).json({ message: error.message });
     }
   }
 
