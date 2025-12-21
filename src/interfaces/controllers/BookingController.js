@@ -268,38 +268,39 @@ async approve(req, res) {
 
 
 
-  async reject(req, res) {
-    try {
-      const rawId = req.params.id || req.params.bookingId;
-      const { reason } = req.body;
-      const adminId = req.user.id;
+async reject(req, res) {
+  try {
+    const rawId = req.params?.bookingId ?? req.params?.id ?? req.query?.bookingId;
+    const bId = Number(rawId);
+    const { reason } = req.body;
+    const adminId = req.user.id;
 
-      const bId = Number(rawId);
-      if (!bId || isNaN(bId)) {
-          return res.status(400).json({ message: "Booking ID không hợp lệ" });
-      }
-
-      // Gọi repository
-      const result = await this.bookingRepository.reject(bId, adminId, reason);
-
-      if (result.user && result.user.email) {
-        const bookingDetails = {
-          roomName: result.facility ? result.facility.name : 'Phòng học', // Check null safety
-          date: result.startTime,
-          slot: `${result.startTime} - ${result.endTime}`
-        };
-
-        sendBookingNotification(result.user.email, bookingDetails, 'REJECTED', reason)
-          .catch(err => console.error('Email error:', err));
-      }
-
-      return res.json({ success: true, message: 'Đã từ chối booking.', data: result });
-    } catch (error) {
-      // Trả về lỗi rõ ràng hơn
-      const status = error.message.includes("không tồn tại") ? 404 : 500;
-      return res.status(status).json({ message: error.message });
+    if (!bId || Number.isNaN(bId)) {
+      return res.status(400).json({ message: "Booking ID không hợp lệ" });
     }
+    if (!reason || !String(reason).trim()) {
+      return res.status(400).json({ message: "Vui lòng nhập lý do từ chối" });
+    }
+
+    const result = await this.bookingRepository.reject(bId, adminId, reason);
+
+    if (result?.user?.email) {
+      const bookingDetails = {
+        roomName: result.facility?.name,
+        date: result.startTime,
+        slot: `${result.startTime} - ${result.endTime}`
+      };
+
+      sendBookingNotification(result.user.email, bookingDetails, "REJECTED", reason)
+        .catch(err => console.error("Email error:", err));
+    }
+
+    return res.json({ success: true, message: "Đã từ chối booking.", data: result });
+  } catch (error) {
+    return res.status(400).json({ message: error.message });
   }
+}
+
 
   async searchForGuard(req, res) {
     try {
