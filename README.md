@@ -9,11 +9,31 @@ Hệ thống giúp giải quyết bài toán xung đột lịch đặt, tối ư
 * **Core:** Node.js, Express.js
 * **Database:** PostgreSQL
 * **ORM:** Prisma (Schema management, Migrations, Seeding)
-* **Authentication:** JWT (JSON Web Token), Bcryptjs
+* **Authentication:** JWT + Google OAuth 2.0 (Passport.js)
 * **Architecture:** Clean Architecture (Phân tách rõ ràng giữa Domain, Application và Infrastructure)
 * **Documentation:** Swagger UI (OpenAPI 3.0)
 
 ## 3. Tính năng chính
+
+### 1. Dành cho Sinh viên & CLB
+* **Smart Booking:** Tìm kiếm và đặt phòng theo slot. Hỗ trợ cơ chế **Soft-lock** (cho phép nhiều người cùng Pending).
+* **Club Priority:** Tự động gợi ý phòng ưu tiên và cộng điểm ưu tiên cho Club Leader.
+* **Google Login:** Đăng nhập nhanh bằng email sinh viên (`@fpt.edu.vn`).
+
+### 2. Dành cho Giảng viên (Lecturer)
+* **Recurring Booking:** Đặt lịch định kỳ (VD: 10 tuần liên tiếp) chỉ với 1 thao tác. Hệ thống tự động quét và báo cáo các tuần bị trùng.
+* **High Priority:** Được quyền đặt các phòng chuyên dụng (Lớp học, Phòng họp).
+
+### 3. Dành cho Quản trị viên (Facility Admin)
+* **Conflict Resolution:** Duyệt 1 đơn -> Hệ thống tự động từ chối các đơn trùng lịch khác.
+* **Intelligent Maintenance:** Khi set phòng bảo trì, thuật toán tự động tìm phòng thay thế (Relocation) cho các đơn đã duyệt hoặc hủy nếu hết phòng.
+* **Resource Management:** Quản lý phòng, thiết bị theo tình trạng (Good/Broken).
+
+### 4. Dành cho Bảo vệ (Security Guard)
+* **Manual Check-in:** Check-in nhanh bằng mã đơn hoặc tên.
+* **Incident Report:** Báo cáo sự cố hỏng hóc nhanh chóng tại hiện trường.
+
+---
 * **Phân quyền (RBAC):**
     * **Student:** Xem lịch, Đặt phòng (ngắn hạn), Xem lịch sử.
     * **Lecturer:** Đặt phòng (ngắn hạn & định kỳ theo kỳ học), Quyền ưu tiên.
@@ -63,7 +83,9 @@ Hệ thống giúp giải quyết bài toán xung đột lịch đặt, tối ư
     ```
 
 6.  **Truy cập tài liệu API:**
-    * Mở trình duyệt: `http://localhost:3000/api-docs`
+    * Mở trình duyệt: `http://localhost:3000/api-docs` (port tùy chỉnh))
+    * Chạy trên Server: `https://multi-campus-facility-booking-system-vh0n.onrender.com/api-docs`
+
 
 ## 5. Cấu trúc dự án
 ```

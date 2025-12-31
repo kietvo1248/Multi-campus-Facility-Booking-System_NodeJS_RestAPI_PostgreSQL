@@ -52,6 +52,8 @@ buildTime(dateISO, hhmm) {
       createdById: group.createdById,
       user: group.createdBy || group.user,
 
+      createdAt: group.createdAt,
+
       facilityName: firstBooking.facility.name,
       facilityId: firstBooking.facilityId,
       startDate: firstBooking.startTime,
@@ -738,7 +740,7 @@ buildTime(dateISO, hhmm) {
           include: { facility: true, bookingType: true },
         },
       },
-      orderBy: { createdAt: "asc" },
+      orderBy: { createdAt: "desc" },
     });
 
     const singleBookings = await this.prisma.booking.findMany({
@@ -752,7 +754,7 @@ buildTime(dateISO, hhmm) {
         facility: { include: { type: true, campus: true } },
         bookingType: true,
       },
-      orderBy: { createdAt: "asc" },
+      orderBy: { createdAt: "desc" },
     });
 
     const formattedGroups = groups
